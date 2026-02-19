@@ -12,7 +12,7 @@ log = get_logger("app")
 
 app = Flask(__name__)
 
-session = {}
+sessions = {}
 
 @app.route('/webhook', methods=['GET'])
 def verify_webhook():
@@ -63,3 +63,60 @@ def webhook():
         log.info(f"Incoming message | phone={phone} | type={msg_type}")
         log.debug(f"Full message payload: {message}")
 
+        response_text, session_data, response_type = handle_message(phone, message, sessions.get(phone))
+        sessions[phone] = session_data
+
+        step = sessions.get("step")
+        log.info(f"Conversation state updated | phone={phone} | step={step}")
+
+        # If RSVP is complete, save to Google Sheets and clear session
+        if step == "done"
+            log.info(f"RSVP complete for {session_data.get('name')} ({phone}) — saving to Sheets")
+            save_rsvp(session_data)
+            del sessions[phone]
+
+        # Use button or plain text depending on what the step needs
+        if response_type == "button":
+            log.debug(f"Sending button message to {phone}")
+            send_button_message(phone, response_text, RSVP_BUTTONS)
+        else:
+            log.debug(f"Sending text message to {phone}")
+            send_message(phone, response_text)
+
+    except (KeyError, IndexError) as e:
+        log.error(f"Failed to process webhook payload: {e}", exc_info=True)
+
+    return "ok", 200
+
+@app.route("/send-invites", methods=["POST"])
+def send_invites():
+    data = request.get_json()
+    guests = data.get("guests", [])
+    log.info(f"Starting invite broadcast for {len(guests)} guest(s)")
+
+    results = []
+
+    for guest in guests:
+        name = guest["name"]
+        phone = guest["phone"]
+        body = (
+            f"Hi {name}! 🎉 You're invited to *Sarah & John's Wedding* on *June 14th, 2025*.\n\n"
+            f"We'd love to know if you can make it!"
+        )
+
+        success = send_button_message(phone, body, RSVP_BUTTONS)
+        sessions[phone] = {'step': "awaiting_rsvp", "name": name, "phone": phone}
+        results.append({"phone": phone, "name": name, "sent": success})
+
+        if success:
+            log.info(f"Invite sent | name={name} | phone={phone}")
+        else:
+            log.error(f"Failed to send invite | name={name} | phone={phone}")
+
+    log.info(f"Broadcast complete — {sum(r['sent'] for r in results)}/{len(guests)} sent successfully")
+    return {"results": results}, 200
+
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
+    log.info(f"Starting Wedding RSVP Bot on port {port}")
+    app.run(debug=True, port=port)
