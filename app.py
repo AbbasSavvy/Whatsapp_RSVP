@@ -2,6 +2,7 @@ import os
 import json
 from flask import Flask, request
 from dotenv import load_dotenv
+from logger import get_logger
 from whatsapp import send_message, send_button_message
 from sheets import save_rsvp
 from conversation import handle_message, RSVP_BUTTONS
