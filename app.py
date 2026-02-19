@@ -63,4 +63,3 @@ def webhook():
         log.info(f"Incoming message | phone={phone} | type={msg_type}")
         log.debug(f"Full message payload: {message}")
 
-        
