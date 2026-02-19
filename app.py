@@ -66,14 +66,15 @@ def webhook():
         response_text, session_data, response_type = handle_message(phone, message, sessions.get(phone))
         sessions[phone] = session_data
 
-        step = sessions.get("step")
+        step = session_data.get("step")
         log.info(f"Conversation state updated | phone={phone} | step={step}")
 
         # If RSVP is complete, save to Google Sheets and clear session
-        if step == "done":
+        if session_data.get("step") == "done":
             log.info(f"RSVP complete for {session_data.get('name')} ({phone}) — saving to Sheets")
             save_rsvp(session_data)
-            del sessions[phone]
+            if phone in sessions:
+                del sessions[phone]
 
         # Use button or plain text depending on what the step needs
         if response_type == "button":
@@ -115,6 +116,14 @@ def send_invites():
 
     log.info(f"Broadcast complete — {sum(r['sent'] for r in results)}/{len(guests)} sent successfully")
     return {"results": results}, 200
+
+
+@app.route("/test", methods=["GET"])
+def test():
+    from whatsapp import send_message
+    success = send_message("918779971458", "Hello from the wedding bot!")
+    return {"sent": success}
+
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))

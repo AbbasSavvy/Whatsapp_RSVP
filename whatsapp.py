@@ -67,7 +67,9 @@ def send_button_message(to, body, buttons):
         response.raise_for_status()
         log.info(f"Button message sent | to={to} | status={response.status_code}")
         return True
+
     except requests.RequestException as e:
-        log.error(f"Failed to send button message | to={to} | error={e}", exc_info=True)
+        log.error(f"Failed to send button message | to={to} | error={e}")
+        log.error(f"Meta response: {e.response.text}")
         return False
     

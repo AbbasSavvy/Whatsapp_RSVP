@@ -17,9 +17,10 @@ log = get_logger("conversation")
 
 # Buttons:
 RSVP_BUTTONS = [
-    {"id": "yes", "title": "✅ Yes, Will be attending!"},
-    {"id": "no", "title": "❌ No, Cannot make it."},
+    {"id": "yes", "title": "Yes, I'll be there!"},
+    {"id": "no", "title": "No, Can't make it."},
 ]
+
 
 def extract_input(message):
     """
