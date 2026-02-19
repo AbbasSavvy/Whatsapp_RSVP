@@ -70,7 +70,7 @@ def webhook():
         log.info(f"Conversation state updated | phone={phone} | step={step}")
 
         # If RSVP is complete, save to Google Sheets and clear session
-        if step == "done"
+        if step == "done":
             log.info(f"RSVP complete for {session_data.get('name')} ({phone}) — saving to Sheets")
             save_rsvp(session_data)
             del sessions[phone]
