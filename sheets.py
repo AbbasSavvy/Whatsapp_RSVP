@@ -32,6 +32,27 @@ def get_guests():
         log.error(f"Failed to get guests from sheet: {e}", exc_info=True)
         return []
 
+def update_guests_sheet(phone, status):
+    """Update the Status Column for a guest in the Guests spreadsheet"""
+    try:
+        creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+        client = gspread.authorize(creds)
+        spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+        sheet = spreadsheet.worksheet("Guests")
+
+        # Getting the correct row from this phone number:
+        phones = sheet.col_values(2) # Column B = Phone
+        if str(phone) in phones:
+            row = phones.index(str(phone)) + 1 # +1 since sheets are 1-indexed
+            sheet.update_cell(row, 3, status) # Col C = Status
+            log.info(f"Guest status updated | phone={phone} | status={status}")
+        else:
+            log.warning(f"Phone not found in Guests sheet | phone={phone}")
+    except Exception as e:
+        log.error(f"Failed to update status | phone={phone} | status={status}", exc_info=True)
+
+
+
 
 def save_rsvp(session):
     name = session.get("name", "Unknown")
