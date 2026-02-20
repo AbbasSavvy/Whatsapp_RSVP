@@ -17,7 +17,21 @@ def get_sheet():
     client = gspread.authorize(creds)
     spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
     log.debug("Google Sheets connection established")
-    return spreadsheet.sheet1
+    return spreadsheet.worksheet("Responses")
+
+def get_guests():
+    try:
+        creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+        client = gspread.authorize(creds)
+        spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+        sheet = spreadsheet.worksheet("Guests")
+        records = sheet.get_all_records()
+        log.info(f"Loaded {len(records)} guests from sheet")
+        return records
+    except Exception as e:
+        log.error(f"Failed to get guests from sheet: {e}", exc_info=True)
+        return []
+
 
 def save_rsvp(session):
     name = session.get("name", "Unknown")
