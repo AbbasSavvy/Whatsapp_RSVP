@@ -75,10 +75,11 @@ def handle_message(phone, message, session):
             session["step"] = "awaiting_count"
             return (
                 "Wonderful! We're so excited to celebrate with you! 🥂\n\n"
-                "How many guests will be joining you in total? *(including yourself, max 4)*\n\nJust reply with a number.",
+                "How many guests will be joining you? Reply with a *number* or *all*.",
                 session,
                 "text",
             )
+
 
         elif is_no:
             log.info(f"Guest declined attendance | phone={phone} | name={session.get('name')}")
@@ -103,28 +104,55 @@ def handle_message(phone, message, session):
 
  # ── Step 2: Awaiting guest count ────────────────────────────────────────
     elif step == "awaiting_count":
-        try:
-            count = int(value)
-            if count < 1 or count > 4:
-                log.warning(f"Guest count out of range | phone={phone} | value={count}")
-                return "Please enter a number between *1 and 4* for your total guest count.", session, "text"
+        value_stripped = value.strip().lower()
 
-            session["guests"] = count
-            session["step"] = "done"
-            name = session.get("name", "Guest")
+        if value_stripped == all:
+            guest_count = "All"
+        else:
+            try:
+                guest_count = int(value)
+                if guest_count < 1:
+                    log.warning(f"Guest count less than 1 | phone={phone} | value={value}")
+                    return "Please enter a number greater than 0, or reply *all*.", session, "text"
+            except ValueError:
+                log.warning(f"Invalid guest count input | phone={phone} | value={value}")
+                return "Please reply with a *number* (e.g. *2*) or the word *all*.", session, "text"
 
-            log.info(f"Guest count recorded | phone={phone} | name={name} | count={count}")
+        session["guests"] = guest_count
+        session["step"] = "done"
+        name = session.get("name", "Guest")
+        log.info(f"Guest count recorded | phone={phone} | name={name} | count={guest_count}")
 
-            return (
-                f"Perfect! We've noted *{count} guest(s)* for {name}. 🎊\n\n"
-                "Your RSVP is confirmed! We can't wait to see you on June 14th. 💍\n\n"
-                "_If anything changes, please contact Sarah or John directly._",
-                session,
-                "text",
-            )
-        except ValueError:
-            log.warning(f"Invalid guest count input | phone={phone} | value='{value}'")
-            return "Please reply with just a *number* (e.g. *2*).", session, "text"
+        return (
+            f"Perfect! We've noted *{guest_count} guest(s)* for {name}. 🎊\n\n"
+            "Your RSVP is confirmed! We can't wait to see you on June 14th. 💍\n\n"
+            "_If anything changes, please contact Sarah or John directly._",
+            session,
+            "text",
+        )
+
+        # try:
+        #     count = int(value)
+        #     if count < 1 or count > 4:
+        #         log.warning(f"Guest count out of range | phone={phone} | value={count}")
+        #         return "Please enter a number between *1 and 4* for your total guest count.", session, "text"
+        #
+        #     session["guests"] = count
+        #     session["step"] = "done"
+        #     name = session.get("name", "Guest")
+        #
+        #     log.info(f"Guest count recorded | phone={phone} | name={name} | count={count}")
+        #
+        #     return (
+        #         f"Perfect! We've noted *{count} guest(s)* for {name}. 🎊\n\n"
+        #         "Your RSVP is confirmed! We can't wait to see you on June 14th. 💍\n\n"
+        #         "_If anything changes, please contact Sarah or John directly._",
+        #         session,
+        #         "text",
+        #     )
+        # except ValueError:
+        #     log.warning(f"Invalid guest count input | phone={phone} | value='{value}'")
+        #     return "Please reply with just a *number* (e.g. *2*).", session, "text"
 
  # ── Already done ─────────────────────────────────────────────────────────
     elif step == "done":
