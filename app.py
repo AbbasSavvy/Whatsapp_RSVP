@@ -4,7 +4,7 @@ from flask import Flask, request
 from dotenv import load_dotenv
 from logger import get_logger
 from whatsapp import send_message, send_button_message
-from sheets import save_rsvp, get_guests
+from sheets import save_rsvp, get_guests, update_guests_sheet
 from conversation import handle_message, RSVP_BUTTONS
 
 load_dotenv()
@@ -142,9 +142,13 @@ def send_all_invites():
         results.append({"phone": phone, "name": name, "sent": success})
 
         if success:
+            update_guests_sheet(name, phone, "Invited")
             log.info(f"Invite sent | name={name} | phone={phone}")
         else:
+            update_guests_sheet(name, phone, "Could Not Connect")
             log.error(f"Failed to send invite | name={name} | phone={phone}")
+
+        results.append({"phone": phone, "name": name, "sent": success})
 
     log.info(f"Broadcast complete - {sum(r['sent'] for r in results)}/{len(guests)} sent successfully")
     return {"results": results}, 200
