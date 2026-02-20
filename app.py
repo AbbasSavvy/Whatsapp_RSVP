@@ -4,7 +4,7 @@ from flask import Flask, request
 from dotenv import load_dotenv
 from logger import get_logger
 from whatsapp import send_message, send_button_message
-from sheets import save_rsvp
+from sheets import save_rsvp, get_guests
 from conversation import handle_message, RSVP_BUTTONS
 
 load_dotenv()
@@ -123,6 +123,31 @@ def test():
     from whatsapp import send_message
     success = send_message("918779971458", "Hello from the wedding bot!")
     return {"sent": success}
+
+@app.route("/send-all-invites", methods=["POST"])
+def send_all_invites():
+    guests = get_guests()
+    log.info(f"Sending invite to {len(guests)} guest(s) from Google Sheets.")
+    results = []
+
+    for guest in guests:
+        name = guest["Name"]
+        phone = str(guest["Phone"])
+        body = (
+            f"Hi {name}! 🎉 You're invited to *Sarah & John's Wedding* on *June 14th, 2025*.\n\n"
+            f"We'd love to know if you can make it!"
+        )
+        success = send_button_message(phone, body, RSVP_BUTTONS)
+        sessions[phone] = {'step': "awaiting_rsvp", "name": name, "phone": phone}
+        results.append({"phone": phone, "name": name, "sent": success})
+
+        if success:
+            log.info(f"Invite sent | name={name} | phone={phone}")
+        else:
+            log.error(f"Failed to send invite | name={name} | phone={phone}")
+
+    log.info(f"Broadcast complete - {sum(r['sent'] for r in results)}/{len(guests)} sent successfully")
+    return {"results": results}, 200
 
 
 if __name__ == '__main__':
