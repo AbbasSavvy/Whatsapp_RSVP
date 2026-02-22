@@ -73,6 +73,7 @@ def webhook():
         if session_data.get("step") == "done":
             log.info(f"RSVP complete for {session_data.get('name')} ({phone}) — saving to Sheets")
             save_rsvp(session_data)
+            update_guests_sheet(session_data.get("name"), phone, "Invited and Responded")
             if phone in sessions:
                 del sessions[phone]
 
