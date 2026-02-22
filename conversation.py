@@ -106,14 +106,14 @@ def handle_message(phone, message, session):
     elif step == "awaiting_count":
         value_stripped = value.strip().lower()
 
-        if value_stripped == all:
+        if value_stripped == "all":
             guest_count = "All"
         else:
             try:
                 guest_count = int(value)
-                if guest_count < 1:
+                if guest_count < 1 or guest_count > 4:
                     log.warning(f"Guest count less than 1 | phone={phone} | value={value}")
-                    return "Please enter a number greater than 0, or reply *all*.", session, "text"
+                    return "Please enter a number between 1 and 4, or reply *all*.", session, "text"
             except ValueError:
                 log.warning(f"Invalid guest count input | phone={phone} | value={value}")
                 return "Please reply with a *number* (e.g. *2*) or the word *all*.", session, "text"
@@ -131,29 +131,7 @@ def handle_message(phone, message, session):
             "text",
         )
 
-        # try:
-        #     count = int(value)
-        #     if count < 1 or count > 4:
-        #         log.warning(f"Guest count out of range | phone={phone} | value={count}")
-        #         return "Please enter a number between *1 and 4* for your total guest count.", session, "text"
-        #
-        #     session["guests"] = count
-        #     session["step"] = "done"
-        #     name = session.get("name", "Guest")
-        #
-        #     log.info(f"Guest count recorded | phone={phone} | name={name} | count={count}")
-        #
-        #     return (
-        #         f"Perfect! We've noted *{count} guest(s)* for {name}. 🎊\n\n"
-        #         "Your RSVP is confirmed! We can't wait to see you on June 14th. 💍\n\n"
-        #         "_If anything changes, please contact Sarah or John directly._",
-        #         session,
-        #         "text",
-        #     )
-        # except ValueError:
-        #     log.warning(f"Invalid guest count input | phone={phone} | value='{value}'")
-        #     return "Please reply with just a *number* (e.g. *2*).", session, "text"
-
+        
  # ── Already done ─────────────────────────────────────────────────────────
     elif step == "done":
         log.info(f"Message received after RSVP completion | phone={phone}")
