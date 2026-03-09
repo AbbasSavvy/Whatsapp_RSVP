@@ -151,5 +151,5 @@ def send_invite_template(to, guest_name, event_name, event_date, image_url=None)
         log.error(f"Failed to send invite template | to={to} | error={e}")
         log.error(f"Meta response: {e.response.text}")
         return False
-    
+
 

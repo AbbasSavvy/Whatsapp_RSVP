@@ -3,7 +3,7 @@ import json
 from flask import Flask, request
 from dotenv import load_dotenv
 from logger import get_logger
-from whatsapp import send_message, send_button_message
+from whatsapp import send_message, send_button_message, send_invite_template
 from sheets import save_rsvp, get_guests, update_guests_sheet
 from conversation import handle_message, RSVP_BUTTONS
 
@@ -112,7 +112,14 @@ def send_invites():
         phone = guest["phone"]
         max_guests = guest.get("max_guests", 1)
 
-        success = send_invite_template
+        success = send_invite_template(phone, name, WEDDING_NAME, WEDDING_DATE, INVITE_IMAGE_URL)
+        sessions[phone] = {"step": "awaiting_rsvp", "name": name, "phone": phone, "max_guests": max_guests}
+        results.append({"phone": phone, "name": name, "sent": success})
+
+        if success:
+            log.info(f"Invite sent | name={name} | phone={phone} | max_guests={max_guests}")
+        else:
+            log.error(f"Failed to send invite | name={name} | phone={phone}")
 
         body = (
             f"Hi {name}! 🎉 You're invited to *Sarah & John's Wedding* on *June 14th, 2025*.\n\n"
