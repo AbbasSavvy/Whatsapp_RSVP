@@ -14,6 +14,14 @@ app = Flask(__name__)
 
 sessions = {}
 
+
+# ── Wedding Configuration ────────────────────────────────────────────────────
+WEDDING_NAME = "Sarah & John's Wedding"
+WEDDING_DATE = "June 14th, 2025"
+INVITE_IMAGE_URL = None
+
+
+
 @app.route('/webhook', methods=['GET'])
 def verify_webhook():
     mode = request.args.get('hub.mode')
