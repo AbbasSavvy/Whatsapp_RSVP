@@ -121,19 +121,6 @@ def send_invites():
         else:
             log.error(f"Failed to send invite | name={name} | phone={phone}")
 
-        body = (
-            f"Hi {name}! 🎉 You're invited to *Sarah & John's Wedding* on *June 14th, 2025*.\n\n"
-            f"We'd love to know if you can make it!"
-        )
-
-        success = send_button_message(phone, body, RSVP_BUTTONS)
-        sessions[phone] = {'step': "awaiting_rsvp", "name": name, "phone": phone}
-        results.append({"phone": phone, "name": name, "sent": success})
-
-        if success:
-            log.info(f"Invite sent | name={name} | phone={phone}")
-        else:
-            log.error(f"Failed to send invite | name={name} | phone={phone}")
 
     log.info(f"Broadcast complete — {sum(r['sent'] for r in results)}/{len(guests)} sent successfully")
     return {"results": results}, 200
@@ -141,7 +128,6 @@ def send_invites():
 
 @app.route("/test", methods=["GET"])
 def test():
-    from whatsapp import send_message
     success = send_message("918779971458", "Hello from the wedding bot!")
     return {"sent": success}
 
@@ -154,14 +140,11 @@ def send_all_invites():
     for guest in guests:
         name = guest["Name"]
         phone = str(guest["Phone"])
-        body = (
-            f"Hi {name}! 🎉 You're invited to *Sarah & John's Wedding* on *June 14th, 2025*.\n\n"
-            f"We'd love to know if you can make it!"
-        )
-        success = send_button_message(phone, body, RSVP_BUTTONS)
-        # success = send_message(phone, body)
-        sessions[phone] = {'step': "awaiting_rsvp", "name": name, "phone": phone}
 
+        max_guests = int(guest.get("Max Guests", 1))
+        success = send_invite_template(phone, name, WEDDING_NAME, WEDDING_DATE, INVITE_IMAGE_URL)
+        sessions[phone] = {'step': "awaiting_rsvp", "name": name, "phone": phone, "max_guests": max_guests}
+        
         if success:
             update_guests_sheet(name, phone, "Invited")
             log.info(f"Invite sent | name={name} | phone={phone}")
