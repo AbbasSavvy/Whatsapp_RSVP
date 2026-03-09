@@ -44,7 +44,7 @@ def update_guests_sheet(name, phone, status):
         phones = sheet.col_values(2) # Column B = Phone
         if str(phone) in phones:
             row = phones.index(str(phone)) + 1 # +1 since sheets are 1-indexed
-            sheet.update_cell(row, 3, status) # Col C = Status
+            sheet.update_cell(row, 4, status) # Col D = Status
             log.info(f"Guest status updated | name={name} | phone={phone} | status={status}")
         else:
             log.warning(f"Phone not found in Guests sheet | name={name} | phone={phone}")

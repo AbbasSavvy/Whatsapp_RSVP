@@ -144,7 +144,7 @@ def send_all_invites():
         max_guests = int(guest.get("Max Guests", 1))
         success = send_invite_template(phone, name, WEDDING_NAME, WEDDING_DATE, INVITE_IMAGE_URL)
         sessions[phone] = {'step': "awaiting_rsvp", "name": name, "phone": phone, "max_guests": max_guests}
-        
+
         if success:
             update_guests_sheet(name, phone, "Invited")
             log.info(f"Invite sent | name={name} | phone={phone}")
