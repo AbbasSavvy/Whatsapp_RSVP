@@ -139,8 +139,8 @@ def send_all_invites():
             f"We'd love to know if you can make it!"
         )
         success = send_button_message(phone, body, RSVP_BUTTONS)
+        # success = send_message(phone, body)
         sessions[phone] = {'step': "awaiting_rsvp", "name": name, "phone": phone}
-        results.append({"phone": phone, "name": name, "sent": success})
 
         if success:
             update_guests_sheet(name, phone, "Invited")

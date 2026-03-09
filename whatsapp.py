@@ -14,6 +14,16 @@ def _get_url():
     phone_number_id = os.getenv('WHATSAPP_PHONE_NUMBER_ID')
     return f"https://graph.facebook.com/v19.0/{phone_number_id}/messages"
 
+
+def _get_headers():
+    token = os.getenv('WHATSAPP_ACCESS_TOKEN')
+    log.debug(f"Using token: {token[:20]}...")  # only logs first 20 chars
+    return {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+
 def send_message(to, text):
     payload = {
         "messaging_product": "whatsapp",
@@ -66,6 +76,7 @@ def send_button_message(to, body, buttons):
         response = requests.post(_get_url(), headers=_get_headers(), json=payload, timeout=10)
         response.raise_for_status()
         log.info(f"Button message sent | to={to} | status={response.status_code}")
+        log.info(f"Meta response: {response.json()}")
         return True
 
     except requests.RequestException as e:

@@ -73,9 +73,25 @@ def handle_message(phone, message, session):
             log.info(f"Guest confirmed attendance | phone={phone} | name={session.get('name')}")
             session["attending"] = True
             session["step"] = "awaiting_count"
+            max_guests = session.get("max_guests", 1)
+
+            if max_guests == 1:
+                session["guests"] = 1
+                session["step"] = "done"
+                name = session.get("name", "Guest")
+                log.info(f"Single guest auto-confirmed | phone={phone} | name={name}")
+
+                return (
+                    f"Wonderful! We're so excited to celebrate with you, {name}! 🥂\n\n"
+                    "Your RSVP is confirmed! We can't wait to see you on June 14th. 💍\n\n"
+                    "_If anything changes, please contact Sarah or John directly._",
+                    session,
+                    "text",
+                )
+
             return (
-                "Wonderful! We're so excited to celebrate with you! 🥂\n\n"
-                "How many guests will be joining you? Reply with a *number* or *all*.",
+                f"Wonderful! We're so excited to celebrate with you! 🥂\n\n"
+                f"How many guests will be joining you? Please reply with a number between *1* and *{max_guests}*.",
                 session,
                 "text",
             )
