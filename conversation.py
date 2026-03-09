@@ -120,19 +120,26 @@ def handle_message(phone, message, session):
 
  # ── Step 2: Awaiting guest count ────────────────────────────────────────
     elif step == "awaiting_count":
-        value_stripped = value.strip().lower()
 
-        if value_stripped == "all":
-            guest_count = "All"
-        else:
-            try:
-                guest_count = int(value)
-                if guest_count < 1 or guest_count > 4:
-                    log.warning(f"Guest count less than 1 | phone={phone} | value={value}")
-                    return "Please enter a number between 1 and 4, or reply *all*.", session, "text"
-            except ValueError:
-                log.warning(f"Invalid guest count input | phone={phone} | value={value}")
-                return "Please reply with a *number* (e.g. *2*) or the word *all*.", session, "text"
+        max_guests = session.get("max_guests", 1)
+
+        try:
+            guest_count = int(value.strip())
+            if guest_count < 1 or guest_count > max_guests:
+                log.warning(f"Guest count out of range | phone={phone} | value={value} | max={max_guests}")
+                return (
+                    f"Please enter a number between *1* and *{max_guests}*.",
+                    session,
+                    "text",
+                )
+
+        except ValueError:
+            log.warning(f"Invalid guest count input | phone={phone} | value='{value}'")
+            return (
+                f"Please reply with a *number* between 1 and {max_guests} (e.g. *2*).",
+                session,
+                "text",
+            )
 
         session["guests"] = guest_count
         session["step"] = "done"
