@@ -100,6 +100,7 @@ def webhook():
 
 @app.route("/send-invites", methods=["POST"])
 def send_invites():
+    """For manual testing"""
     data = request.get_json()
     guests = data.get("guests", [])
     log.info(f"Starting invite broadcast for {len(guests)} guest(s)")
@@ -109,6 +110,10 @@ def send_invites():
     for guest in guests:
         name = guest["name"]
         phone = guest["phone"]
+        max_guests = guest.get("max_guests", 1)
+
+        success = send_invite_template
+
         body = (
             f"Hi {name}! 🎉 You're invited to *Sarah & John's Wedding* on *June 14th, 2025*.\n\n"
             f"We'd love to know if you can make it!"

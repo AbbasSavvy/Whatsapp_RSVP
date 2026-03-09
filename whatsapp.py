@@ -15,14 +15,6 @@ def _get_url():
     return f"https://graph.facebook.com/v19.0/{phone_number_id}/messages"
 
 
-def _get_headers():
-    token = os.getenv('WHATSAPP_ACCESS_TOKEN')
-    log.debug(f"Using token: {token[:20]}...")  # only logs first 20 chars
-    return {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }
-
 
 def send_message(to, text):
     payload = {
@@ -40,6 +32,7 @@ def send_message(to, text):
     except requests.RequestException as e:
         log.error(f"Failed to send text message | to={to} | error={e}", exc_info=True)
         return False
+
 
 def send_button_message(to, body, buttons):
     """
@@ -83,4 +76,80 @@ def send_button_message(to, body, buttons):
         log.error(f"Failed to send button message | to={to} | error={e}")
         log.error(f"Meta response: {e.response.text}")
         return False
+
+
+def send_invite_template(to, guest_name, event_name, event_date, image_url=None):
+    """
+        Send the approved 'event_invite' template message via Meta Cloud API.
+
+        Parameters:
+            to         : recipient phone number (e.g. "919876543210")
+            guest_name : fills {{guest_name}} in the template body
+            event_name : fills {{event_name}} in the template header and body
+            event_date : fills {{event_date}} in the template body
+            image_url  : optional public URL for the image header
+                         (if None, falls back to text header using event_name)
+        """
+
+    if image_url:
+        header_component = {
+            "type": "header",
+            "parameters": [
+                {"type": "image", "image": {"link": image_url}}
+            ]
+        }
+    else:
+        header_component = {
+            "type": "header",
+            "parameters": [
+                {"type": "text", "text": event_name}
+            ]
+        }
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "template",
+        "template": {
+            "name": "rsvp_template",
+            "language": {"code": "en"},
+            "components":[
+                header_component,
+                {
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": guest_name},
+                        {"type": "text", "text": event_name},
+                        {"type": "text", "text": event_date},
+                    ]
+                },
+                {
+                    "type": "button",
+                    "sub_type": "quick_reply",
+                    "index": "0",
+                    "parameters": [{"type": "payload", "payload": "yes"}]
+                },
+                {
+                    "type": "button",
+                    "sub_type": "quick_reply",
+                    "index": "1",
+                    "parameters": [{"type": "payload", "payload": "no"}]
+                }
+            ],
+        }
+    }
+
+    log.debug(f"Sending invite template | to={to} | guest={guest_name} | event={event_name}")
+
+    try:
+        response = requests.post(_get_url(), headers=_get_headers(), json=payload, timeout=10)
+        response.raise_for_status()
+        log.info(f"Invite template sent | to={to} | status={response.status_code}")
+        return True
+
+    except requests.RequestException as e:
+        log.error(f"Failed to send invite template | to={to} | error={e}")
+        log.error(f"Meta response: {e.response.text}")
+        return False
     
+
