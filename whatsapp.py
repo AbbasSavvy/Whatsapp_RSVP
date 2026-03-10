@@ -118,9 +118,9 @@ def send_invite_template(to, guest_name, event_name, event_date, image_url=None)
                 {
                     "type": "body",
                     "parameters": [
-                        {"type": "text", "text": guest_name},
-                        {"type": "text", "text": event_name},
-                        {"type": "text", "text": event_date},
+                        {"type": "text", "parameter_name": "guest_name", "text": guest_name},
+                        {"type": "text", "parameter_name": "event_name", "text": event_name},
+                        {"type": "text", "parameter_name": "event_date", "text": event_date},
                     ]
                 },
                 {
