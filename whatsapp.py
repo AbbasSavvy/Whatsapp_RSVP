@@ -111,7 +111,7 @@ def send_invite_template(to, guest_name, event_name, event_date, image_url=None)
         "to": to,
         "type": "template",
         "template": {
-            "name": "rsvp_template",
+            "name": "rsvp_template_new",
             "language": {"code": "en"},
             "components":[
                 header_component,
@@ -145,6 +145,7 @@ def send_invite_template(to, guest_name, event_name, event_date, image_url=None)
         response = requests.post(_get_url(), headers=_get_headers(), json=payload, timeout=10)
         response.raise_for_status()
         log.info(f"Invite template sent | to={to} | status={response.status_code}")
+        log.info(f"Meta response: {response.json()}")
         return True
 
     except requests.RequestException as e:
