@@ -53,10 +53,10 @@ def update_guests_sheet(name, phone, status):
         sheet = spreadsheet.worksheet("Guests")
 
         # Getting the correct row from this phone number:
-        phones = sheet.col_values(2) # Column B = Phone
+        phones = sheet.col_values(2)  # Column B = Phone
         if str(phone) in phones:
-            row = phones.index(str(phone)) + 1 # +1 since sheets are 1-indexed
-            sheet.update_cell(row, 4, status) # Col D = Status
+            row = phones.index(str(phone)) + 1  # +1 since sheets are 1-indexed
+            sheet.update_cell(row, 4, status)  # Col D = Status
             log.info(f"Guest status updated | name={name} | phone={phone} | status={status}")
         else:
             log.warning(f"Phone not found in Guests sheet | name={name} | phone={phone}")
@@ -64,18 +64,17 @@ def update_guests_sheet(name, phone, status):
         log.error(f"Failed to update status | name={name} | phone={phone} | status={status}", exc_info=True)
 
 
-
-
 def save_rsvp(session):
     name = session.get("name", "Unknown")
     phone = session.get("phone", "")
+    whos_guest = session.get("whos_guest", "")
 
     try:
         sheet = get_sheet()
         # Add header row if the sheet is empty
         if sheet.row_count == 0 or not sheet.row_values(1):
             log.info("Sheet is empty — adding header row")
-            sheet.append_row(["Timestamp", "Name", "Phone", "Attending", "Number of Guests"])
+            sheet.append_row(["Timestamp", "Name", "Phone", "Attending", "Number of Guests", "Who's Guest"])
 
         row = [
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -83,14 +82,13 @@ def save_rsvp(session):
             phone,
             "Yes" if session.get("attending") else "No",
             session.get("guests", 0),
+            whos_guest,
         ]
 
         sheet.append_row(row)
-        log.info(f"RSVP saved | name={name} | phone={phone} | attending={session.get('attending')} | guests={session.get('guests', 0)}")
+        log.info(f"RSVP saved | name={name} | phone={phone} | attending={session.get('attending')} | guests={session.get('guests', 0)} | whos_guest={whos_guest}")
         return True
 
     except Exception as e:
         log.error(f"Failed to save RSVP to Google Sheets | name={name} | phone={phone} | error={e}", exc_info=True)
         return False
-
-    
