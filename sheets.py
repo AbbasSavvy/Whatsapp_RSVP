@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
@@ -11,9 +12,20 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
+def get_credentials():
+    """Load Google credentials from environment variable or fallback to file."""
+    google_creds_json = os.getenv("GOOGLE_CREDENTIALS")
+    if google_creds_json:
+        log.debug("Loading Google credentials from environment variable")
+        creds_dict = json.loads(google_creds_json)
+        return Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+    else:
+        log.debug("Loading Google credentials from credentials.json file")
+        return Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+
 def get_sheet():
     log.debug("Authenticating with Google Sheets API")
-    creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+    creds = get_credentials()
     client = gspread.authorize(creds)
     spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
     log.debug("Google Sheets connection established")
@@ -21,7 +33,7 @@ def get_sheet():
 
 def get_guests():
     try:
-        creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+        creds = get_credentials()
         client = gspread.authorize(creds)
         spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
         sheet = spreadsheet.worksheet("Guests")
@@ -35,7 +47,7 @@ def get_guests():
 def update_guests_sheet(name, phone, status):
     """Update the Status Column for a guest in the Guests spreadsheet"""
     try:
-        creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+        creds = get_credentials()
         client = gspread.authorize(creds)
         spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
         sheet = spreadsheet.worksheet("Guests")
