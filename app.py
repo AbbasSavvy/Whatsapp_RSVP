@@ -3,7 +3,7 @@ import json
 from flask import Flask, request
 from dotenv import load_dotenv
 from logger import get_logger
-from whatsapp import send_message, send_button_message, send_invite_template, send_invite_template_meta
+from whatsapp import send_message, send_button_message, send_invite_template
 from sheets import save_rsvp, get_guests, update_guests_sheet
 from conversation import handle_message, RSVP_BUTTONS
 
@@ -21,8 +21,6 @@ WEDDING_DATE = "June 14th, 2025"
 INVITE_IMAGE_URL = "https://raw.githubusercontent.com/AbbasSavvy/Whatsapp_RSVP/main/assets/RSVP_Generated.png"
 # INVITE_IMAGE_URL = None
 
-# ── Toggle: set USE_AISENSY=true in .env to use AiSensy, false to use Meta ───
-USE_AISENSY = os.getenv("USE_AISENSY", "false").lower() == "true"
 
 
 @app.route('/webhook', methods=['GET'])
@@ -56,78 +54,50 @@ def webhook():
             }
         }
     }
-
-    Meta webhook payload format:
-    {
-        "entry": [{"changes": [{"value": {"messages": [{
-            "from": "919004942031",
-            "type": "text",
-            "text": {"body": "Yes"}
-        }]}}]}]
-    }
     """
 
     try:
         log.debug(f"Webhook payload received: {data}")
 
-        if USE_AISENSY:
-            # ── AiSensy payload parsing ──────────────────────────────────────
-            if "message" not in data:
-                log.debug("AiSensy webhook contained no message — skipping")
-                return "ok", 200
+        if "message" not in data:
+            log.debug("AiSensy webhook contained no message — skipping")
+            return "ok", 200
 
-            aisensy_message = data["message"]
+        aisensy_message = data["message"]
 
-            # Only process inbound user messages, skip delivery status updates
-            if aisensy_message.get("sender") != "user" and aisensy_message.get("type") != "message":
-                log.debug("AiSensy webhook is not a user message — skipping")
-                return "ok", 200
+        # Only process inbound user messages, skip delivery status updates
+        if aisensy_message.get("sender") != "user" and aisensy_message.get("type") != "message":
+            log.debug("AiSensy webhook is not a user message — skipping")
+            return "ok", 200
 
-            phone = aisensy_message.get("phone_number", "")
-            msg_type = aisensy_message.get("message_type", "unknown")
-            message_content = aisensy_message.get("message_content", {})
+        phone = aisensy_message.get("phone_number", "")
+        msg_type = aisensy_message.get("message_type", "unknown")
+        message_content = aisensy_message.get("message_content", {})
 
-            log.info(f"Incoming AiSensy message | phone={phone} | type={msg_type}")
-            log.debug(f"Full message content: {message_content}")
+        log.info(f"Incoming message | phone={phone} | type={msg_type}")
+        log.debug(f"Full message content: {message_content}")
 
-            # Convert AiSensy payload to internal format expected by conversation.py
-            if msg_type == "TEXT":
-                message = {
-                    "type": "text",
-                    "text": {"body": message_content.get("text", "")}
-                }
-            elif msg_type == "BUTTON" or "button_reply" in message_content:
-                button_reply = message_content.get("button_reply", {})
-                message = {
-                    "type": "interactive",
-                    "interactive": {
-                        "type": "button_reply",
-                        "button_reply": {
-                            "id": button_reply.get("id", ""),
-                            "title": button_reply.get("title", "")
-                        }
+        # Convert AiSensy payload to internal format expected by conversation.py
+        if msg_type == "TEXT":
+            message = {
+                "type": "text",
+                "text": {"body": message_content.get("text", "")}
+            }
+        elif msg_type == "BUTTON" or "button_reply" in message_content:
+            button_reply = message_content.get("button_reply", {})
+            message = {
+                "type": "interactive",
+                "interactive": {
+                    "type": "button_reply",
+                    "button_reply": {
+                        "id": button_reply.get("id", ""),
+                        "title": button_reply.get("title", "")
                     }
                 }
-            else:
-                log.warning(f"Unhandled AiSensy message type | phone={phone} | type={msg_type}")
-                return "ok", 200
-
+            }
         else:
-            # ── Meta payload parsing ─────────────────────────────────────────
-            entry = data['entry'][0]
-            changes = entry['changes'][0]
-            value = changes['value']
-
-            if "messages" not in value:
-                log.debug("Meta webhook contained no messages — skipping")
-                return "ok", 200
-
-            message = value["messages"][0]
-            phone = message["from"]
-            msg_type = message.get("type", "unknown")
-
-            log.info(f"Incoming Meta message | phone={phone} | type={msg_type}")
-            log.debug(f"Full message payload: {message}")
+            log.warning(f"Unhandled message type | phone={phone} | type={msg_type}")
+            return "ok", 200
 
         response_text, session_data, response_type = handle_message(phone, message, sessions.get(phone))
         sessions[phone] = session_data
@@ -156,6 +126,7 @@ def webhook():
 
     return "ok", 200
 
+
 @app.route("/send-invites", methods=["POST"])
 def send_invites():
     """Send invites to a manually provided list of guests."""
@@ -168,10 +139,9 @@ def send_invites():
     for guest in guests:
         name = guest["name"]
         phone = guest["phone"]
-
         max_guests = guest.get("max_guests", 1)
-        success = send_invite_template(phone, name, WEDDING_NAME, WEDDING_DATE, INVITE_IMAGE_URL) if USE_AISENSY \
-            else send_invite_template_meta(phone, name, WEDDING_NAME, WEDDING_DATE, INVITE_IMAGE_URL)
+
+        success = send_invite_template(phone, name, WEDDING_NAME, WEDDING_DATE, INVITE_IMAGE_URL)
         sessions[phone] = {'step': "awaiting_rsvp", "name": name, "phone": phone, "max_guests": max_guests}
         results.append({"phone": phone, "name": name, "sent": success})
 
@@ -189,11 +159,13 @@ def test():
     success = send_message("917021839581", "Hello from the wedding bot!")  # test number
     return {"sent": success}
 
+
 @app.route("/test-sheets", methods=["GET"])
 def test_sheets():
     from sheets import get_guests
     guests = get_guests()
     return {"guests_loaded": len(guests)}
+
 
 @app.route("/send-all-invites", methods=["POST"])
 def send_all_invites():
@@ -205,10 +177,9 @@ def send_all_invites():
     for guest in guests:
         name = guest["Name"]
         phone = str(guest["Phone"])
-
         max_guests = int(guest.get("Max Guests", 1))
-        success = send_invite_template(phone, name, WEDDING_NAME, WEDDING_DATE, INVITE_IMAGE_URL) if USE_AISENSY \
-            else send_invite_template_meta(phone, name, WEDDING_NAME, WEDDING_DATE, INVITE_IMAGE_URL)
+
+        success = send_invite_template(phone, name, WEDDING_NAME, WEDDING_DATE, INVITE_IMAGE_URL)
         sessions[phone] = {'step': "awaiting_rsvp", "name": name, "phone": phone, "max_guests": max_guests}
 
         if success:
