@@ -7,6 +7,16 @@ log = get_logger("whatsapp")
 # ── AiSensy Campaign API (outbound invites) ───────────────────────────────────
 AISENSY_CAMPAIGN_URL = "https://backend.aisensy.com/campaign/t1/api/v2"
 
+# ── AiSensy Project API (outbound replies) ────────────────────────────────────
+AISENSY_PROJECT_ID = "69b5284a41f33f0dae7190b1"
+AISENSY_MESSAGE_URL = f"https://apis.aisensy.com/project-apis/v1/project/{AISENSY_PROJECT_ID}/messages"
+
+def _get_aisensy_headers():
+    return {
+        "X-AiSensy-Project-API-Pwd": os.getenv("AISENSY_PROJECT_API_KEY"),
+        "Content-Type": "application/json",
+    }
+
 # ── Meta Cloud API ────────────────────────────────────────────────────────────
 def _get_meta_headers():
     return {
@@ -20,64 +30,114 @@ def _get_meta_url():
 
 
 def send_message(to, text):
-    """Send a plain text message via Meta Cloud API."""
+    """
+    Send a plain text message.
+    Uses AiSensy Project API if USE_AISENSY=true, otherwise Meta Cloud API.
+    """
+    use_aisensy = os.getenv("USE_AISENSY", "false").lower() == "true"
+
     payload = {
-        "messaging_product": "whatsapp",
         "to": to,
         "type": "text",
+        "recipient_type": "individual",
         "text": {"body": text},
     }
 
-    try:
-        response = requests.post(_get_meta_url(), headers=_get_meta_headers(), json=payload, timeout=10)
-        response.raise_for_status()
-        log.info(f"Text message sent | to={to} | status={response.status_code}")
-        return True
-    except requests.RequestException as e:
-        log.error(f"Failed to send text message | to={to} | error={e}", exc_info=True)
-        return False
+    if use_aisensy:
+        try:
+            response = requests.post(AISENSY_MESSAGE_URL, headers=_get_aisensy_headers(), json=payload, timeout=10)
+            response.raise_for_status()
+            log.info(f"Text message sent via AiSensy | to={to} | status={response.status_code}")
+            return True
+        except requests.RequestException as e:
+            log.error(f"Failed to send text message via AiSensy | to={to} | error={e}", exc_info=True)
+            if hasattr(e, 'response') and e.response is not None:
+                log.error(f"AiSensy response: {e.response.text}")
+            return False
+    else:
+        meta_payload = {
+            "messaging_product": "whatsapp",
+            "to": to,
+            "type": "text",
+            "text": {"body": text},
+        }
+        try:
+            response = requests.post(_get_meta_url(), headers=_get_meta_headers(), json=meta_payload, timeout=10)
+            response.raise_for_status()
+            log.info(f"Text message sent via Meta | to={to} | status={response.status_code}")
+            return True
+        except requests.RequestException as e:
+            log.error(f"Failed to send text message via Meta | to={to} | error={e}", exc_info=True)
+            return False
 
 
 def send_button_message(to, body, buttons):
     """
-    Send an interactive button message via Meta Cloud API.
+    Send a button message.
+    Uses AiSensy 'rsvp_fallback_buttons' template if USE_AISENSY=true,
+    otherwise Meta Cloud API interactive message.
 
-    `buttons` should be a list of dicts like:
-        [{"id": "yes", "title": "Yes, I'll be there!"},
-         {"id": "no",  "title": "No, Can't make it."}]
-
-    Meta allows a maximum of 3 buttons per message.
-    Each button title must be 20 characters or fewer.
+    Note: The `body` and `buttons` parameters are kept for Meta compatibility
+    but AiSensy uses the pre-approved rsvp_fallback_buttons template directly.
     """
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "interactive",
-        "interactive": {
-            "type": "button",
-            "body": {"text": body},
-            "action": {
-                "buttons": [
-                    {"type": "reply", "reply": {"id": btn["id"], "title": btn["title"]}}
-                    for btn in buttons[:3]
-                ]
+    use_aisensy = os.getenv("USE_AISENSY", "false").lower() == "true"
+
+    if use_aisensy:
+        payload = {
+            "to": to,
+            "type": "template",
+            "template": {
+                "language": {
+                    "policy": "deterministic",
+                    "code": "en"
+                },
+                "name": "rsvp_fallback_buttons",
+                "components": []
+            }
+        }
+
+        log.debug(f"Sending fallback button template via AiSensy | to={to}")
+
+        try:
+            response = requests.post(AISENSY_MESSAGE_URL, headers=_get_aisensy_headers(), json=payload, timeout=10)
+            response.raise_for_status()
+            log.info(f"Fallback button template sent via AiSensy | to={to} | status={response.status_code}")
+            return True
+        except requests.RequestException as e:
+            log.error(f"Failed to send fallback button template via AiSensy | to={to} | error={e}")
+            if hasattr(e, 'response') and e.response is not None:
+                log.error(f"AiSensy response: {e.response.text}")
+            return False
+
+    else:
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": to,
+            "type": "interactive",
+            "interactive": {
+                "type": "button",
+                "body": {"text": body},
+                "action": {
+                    "buttons": [
+                        {"type": "reply", "reply": {"id": btn["id"], "title": btn["title"]}}
+                        for btn in buttons[:3]
+                    ]
+                },
             },
-        },
-    }
+        }
 
-    log.debug(f"Sending button message | to={to} | buttons={[b['id'] for b in buttons]}")
+        log.debug(f"Sending button message via Meta | to={to} | buttons={[b['id'] for b in buttons]}")
 
-    try:
-        response = requests.post(_get_meta_url(), headers=_get_meta_headers(), json=payload, timeout=10)
-        response.raise_for_status()
-        log.info(f"Button message sent | to={to} | status={response.status_code}")
-        return True
-
-    except requests.RequestException as e:
-        log.error(f"Failed to send button message | to={to} | error={e}")
-        if hasattr(e, 'response') and e.response is not None:
-            log.error(f"Meta response: {e.response.text}")
-        return False
+        try:
+            response = requests.post(_get_meta_url(), headers=_get_meta_headers(), json=payload, timeout=10)
+            response.raise_for_status()
+            log.info(f"Button message sent via Meta | to={to} | status={response.status_code}")
+            return True
+        except requests.RequestException as e:
+            log.error(f"Failed to send button message via Meta | to={to} | error={e}")
+            if hasattr(e, 'response') and e.response is not None:
+                log.error(f"Meta response: {e.response.text}")
+            return False
 
 
 def send_invite_template(to, guest_name, event_name, event_date, image_url=None):
