@@ -186,8 +186,14 @@ def send_invites():
 
 @app.route("/test", methods=["GET"])
 def test():
-    success = send_message("918779971458", "Hello from the wedding bot!")
+    success = send_message("917021839581", "Hello from the wedding bot!")  # test number
     return {"sent": success}
+
+@app.route("/test-sheets", methods=["GET"])
+def test_sheets():
+    from sheets import get_guests
+    guests = get_guests()
+    return {"guests_loaded": len(guests)}
 
 @app.route("/send-all-invites", methods=["POST"])
 def send_all_invites():
