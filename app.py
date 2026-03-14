@@ -129,7 +129,7 @@ def send_invites():
 
 @app.route("/test", methods=["GET"])
 def test():
-    success = send_message("918779971458", "Hello from the wedding bot!")
+    success = send_message("917021839581", "Hello from the wedding bot!")
     return {"sent": success}
 
 @app.route("/send-all-invites", methods=["POST"])
