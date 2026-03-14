@@ -178,13 +178,14 @@ def send_all_invites():
         name = guest["Name"]
         phone = str(guest["Phone"])
         max_guests = int(guest.get("Max Guests", 1))
+        whos_guest = guest.get("Who's Guest", "")
 
         success = send_invite_template(phone, name, WEDDING_NAME, WEDDING_DATE, INVITE_IMAGE_URL)
-        sessions[phone] = {'step': "awaiting_rsvp", "name": name, "phone": phone, "max_guests": max_guests}
+        sessions[phone] = {'step': "awaiting_rsvp", "name": name, "phone": phone, "max_guests": max_guests, "whos_guest": whos_guest}
 
         if success:
             update_guests_sheet(name, phone, "Invited")
-            log.info(f"Invite sent | name={name} | phone={phone} | max_guests={max_guests}")
+            log.info(f"Invite sent | name={name} | phone={phone} | max_guests={max_guests} | whos_guest={whos_guest}")
         else:
             update_guests_sheet(name, phone, "Could Not Connect")
             log.error(f"Failed to send invite | name={name} | phone={phone}")
