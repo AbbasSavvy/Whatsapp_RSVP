@@ -53,7 +53,7 @@ def handle_message(phone, message, session):
 
     if session is None:
         log.info(f"New conversation started | phone: {phone}")
-        session = {"step": "awaiting_rsvp", "phone": {phone}, "name": "Unknown_Guest"}
+        session = {"step": "awaiting_rsvp", "phone": phone, "name": "Unknown_Guest"}
         body = (
             "Hi! 👋 You've reached the RSVP bot for *Sarah & John's Wedding* on *June 14th, 2025*.\n\n"
             "Will you be able to join us?"
