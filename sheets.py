@@ -92,3 +92,102 @@ def save_rsvp(session):
     except Exception as e:
         log.error(f"Failed to save RSVP to Google Sheets | name={name} | phone={phone} | error={e}", exc_info=True)
         return False
+
+
+
+# ── Session Store (replaces in-memory sessions dict) ─────────────────────────
+
+def _get_sessions_sheet(spreadsheet):
+    """Get or create the Sessions worksheet."""
+    try:
+        return spreadsheet.worksheet("Sessions")
+    except gspread.exceptions.WorksheetNotFound:
+        log.info("Sessions sheet not found — creating it")
+        sheet = spreadsheet.add_worksheet(title="Sessions", rows=1000, cols=8)
+        sheet.append_row(["Phone", "Step", "Name", "MaxGuests", "WhosGuest", "Attending"])
+        return sheet
+
+def get_session(phone):
+    """Load a session from the Sessions sheet by phone number. Returns dict or None."""
+    try:
+        creds = get_credentials()
+        client = gspread.authorize(creds)
+        spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+        sheet = _get_sessions_sheet(spreadsheet)
+
+        phones = sheet.col_values(1)  # Column A = Phone
+        phone_str = str(phone)
+
+        if phone_str not in phones:
+            log.debug(f"No session found | phone={phone}")
+            return None
+
+        row_index = phones.index(phone_str) + 1
+        row = sheet.row_values(row_index)
+
+        session = {
+            "phone":      row[0] if len(row) > 0 else phone_str,
+            "step":       row[1] if len(row) > 1 else "awaiting_rsvp",
+            "name":       row[2] if len(row) > 2 else "Unknown_Guest",
+            "max_guests": int(row[3]) if len(row) > 3 and row[3] else 1,
+            "whos_guest": row[4] if len(row) > 4 else "",
+            "attending":  row[5].lower() == "true" if len(row) > 5 and row[5] else None,
+        }
+        log.debug(f"Session loaded | phone={phone} | step={session['step']}")
+        return session
+
+    except Exception as e:
+        log.error(f"Failed to get session | phone={phone} | error={e}", exc_info=True)
+        return None
+
+def save_session(phone, session_data):
+    """Save or update a session row in the Sessions sheet."""
+    try:
+        creds = get_credentials()
+        client = gspread.authorize(creds)
+        spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+        sheet = _get_sessions_sheet(spreadsheet)
+
+        phones = sheet.col_values(1)  # Column A = Phone
+        phone_str = str(phone)
+
+        row = [
+            phone_str,
+            session_data.get("step", ""),
+            session_data.get("name", ""),
+            str(session_data.get("max_guests", 1)),
+            session_data.get("whos_guest", ""),
+            str(session_data.get("attending", "")),
+        ]
+
+        if phone_str in phones:
+            row_index = phones.index(phone_str) + 1
+            sheet.update(f"A{row_index}:F{row_index}", [row])
+            log.debug(f"Session updated | phone={phone} | step={session_data.get('step')}")
+        else:
+            sheet.append_row(row)
+            log.debug(f"Session created | phone={phone} | step={session_data.get('step')}")
+
+    except Exception as e:
+        log.error(f"Failed to save session | phone={phone} | error={e}", exc_info=True)
+
+def delete_session(phone):
+    """Remove a session row from the Sessions sheet when RSVP is complete."""
+    try:
+        creds = get_credentials()
+        client = gspread.authorize(creds)
+        spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+        sheet = _get_sessions_sheet(spreadsheet)
+
+        phones = sheet.col_values(1)  # Column A = Phone
+        phone_str = str(phone)
+
+        if phone_str in phones:
+            row_index = phones.index(phone_str) + 1
+            sheet.delete_rows(row_index)
+            log.info(f"Session deleted | phone={phone}")
+        else:
+            log.warning(f"Session not found for deletion | phone={phone}")
+
+    except Exception as e:
+        log.error(f"Failed to delete session | phone={phone} | error={e}", exc_info=True)
