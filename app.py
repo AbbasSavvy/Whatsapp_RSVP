@@ -66,7 +66,7 @@ def webhook():
         aisensy_message = data["message"]
 
         # Only process inbound user messages, skip delivery status updates
-        if aisensy_message.get("sender") != "user" and aisensy_message.get("type") != "message":
+        if aisensy_message.get("sender") != "user" or aisensy_message.get("type") != "message":
             log.debug("AiSensy webhook is not a user message — skipping")
             return "ok", 200
 
