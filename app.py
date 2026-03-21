@@ -1,10 +1,11 @@
 import os
 import json
+import time
 from flask import Flask, request
 from dotenv import load_dotenv
 from logger import get_logger
 from whatsapp import send_message, send_button_message, send_invite_template
-from sheets import save_rsvp, get_guests, update_guests_sheet
+from sheets import save_rsvp, get_guests, update_guests_sheet, get_session, save_session, delete_session
 from conversation import handle_message, RSVP_BUTTONS
 
 load_dotenv()
@@ -12,15 +13,12 @@ log = get_logger("app")
 
 app = Flask(__name__)
 
-sessions = {}
-
 
 # ── Wedding Configuration ────────────────────────────────────────────────────
 WEDDING_NAME = "Sarah & John's Wedding"
 WEDDING_DATE = "June 14th, 2025"
 INVITE_IMAGE_URL = "https://raw.githubusercontent.com/AbbasSavvy/Whatsapp_RSVP/main/assets/RSVP_Generated.png"
 # INVITE_IMAGE_URL = None
-
 
 
 @app.route('/webhook', methods=['GET'])
@@ -36,41 +34,46 @@ def verify_webhook():
     log.warning("Webhook verification failed - token mismatch, or wrong mode.")
     return "Forbidden", 403
 
+
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    data = request.get_json()
-
     """
-    AiSensy webhook payload format (message.sender.user topic):
+    AiSensy webhook payload format:
     {
-        "message": {
-            "type": "message",
-            "phone_number": "919004942031",
-            "message_type": "TEXT",
-            "message_content": {
-                "text": "Yes"
-                // OR for button replies:
-                "button_reply": {"id": "yes", "title": "Yes, I'll be there!"}
+        "topic": "message.sender.user",
+        "data": {
+            "message": {
+                "type": "message",
+                "phone_number": "919004942031",
+                "sender": "user",
+                "message_type": "TEXT",
+                "message_content": {
+                    "text": "Yes"
+                    // OR for button replies:
+                    // "button_reply": {"id": "yes", "title": "Yes, I'll be there!"}
+                }
             }
         }
     }
     """
+    data = request.get_json()
 
     try:
         log.debug(f"Webhook payload received: {data}")
 
-        if "message" not in data:
-            log.debug("AiSensy webhook contained no message — skipping")
+        # Only process inbound user messages — filter by topic
+        topic = data.get("topic", "")
+        if topic != "message.sender.user":
+            log.debug(f"Skipping non-user-message topic: {topic}")
             return "ok", 200
 
-        aisensy_message = data["message"]
-
-        # Only process inbound user messages, skip delivery status updates
-        if aisensy_message.get("sender") != "user" or aisensy_message.get("type") != "message":
-            log.debug("AiSensy webhook is not a user message — skipping")
+        # Navigate to the message object inside data.data.message
+        aisensy_message = data.get("data", {}).get("message", {})
+        if not aisensy_message:
+            log.warning("message.sender.user event had no message object — skipping")
             return "ok", 200
 
-        phone = aisensy_message.get("phone_number", "")
+        phone = str(aisensy_message.get("phone_number", ""))
         msg_type = aisensy_message.get("message_type", "unknown")
         message_content = aisensy_message.get("message_content", {})
 
@@ -97,23 +100,27 @@ def webhook():
             }
         else:
             log.warning(f"Unhandled message type | phone={phone} | type={msg_type}")
+            send_message(phone, "Sorry, I can only process text replies. Please type Yes or No.")
             return "ok", 200
 
-        response_text, session_data, response_type = handle_message(phone, message, sessions.get(phone))
-        sessions[phone] = session_data
+        # Load session from Sheets (survives redeploys)
+        session = get_session(phone)
+        response_text, session_data, response_type = handle_message(phone, message, session)
 
         step = session_data.get("step")
         log.info(f"Conversation state updated | phone={phone} | step={step}")
 
-        # If RSVP is complete, save to Google Sheets and clear session
-        if session_data.get("step") == "done":
+        # If RSVP is complete, save response and clean up session
+        if step == "done":
             log.info(f"RSVP complete for {session_data.get('name')} ({phone}) — saving to Sheets")
             save_rsvp(session_data)
             update_guests_sheet(session_data.get("name"), phone, "Invited and Responded")
-            if phone in sessions:
-                del sessions[phone]
+            delete_session(phone)
+        else:
+            # Persist session state to Sheets
+            save_session(phone, session_data)
 
-        # Use button or plain text depending on what the step needs
+        # Send response
         if response_type == "button":
             log.debug(f"Sending button message to {phone}")
             send_button_message(phone, response_text, RSVP_BUTTONS)
@@ -138,17 +145,26 @@ def send_invites():
 
     for guest in guests:
         name = guest["name"]
-        phone = guest["phone"]
-        max_guests = guest.get("max_guests", 1)
+        phone = str(guest["phone"])
+        max_guests = int(guest.get("max_guests", 1))
+        whos_guest = guest.get("whos_guest", "")  # fixed: now read from request body
 
         success = send_invite_template(phone, name, WEDDING_NAME, WEDDING_DATE, INVITE_IMAGE_URL)
-        sessions[phone] = {'step': "awaiting_rsvp", "name": name, "phone": phone, "max_guests": max_guests}
-        results.append({"phone": phone, "name": name, "sent": success})
 
         if success:
+            session_data = {
+                "step": "awaiting_rsvp",
+                "name": name,
+                "phone": phone,
+                "max_guests": max_guests,
+                "whos_guest": whos_guest
+            }
+            save_session(phone, session_data)
             log.info(f"Invite sent | name={name} | phone={phone} | max_guests={max_guests}")
         else:
             log.error(f"Failed to send invite | name={name} | phone={phone}")
+
+        results.append({"phone": phone, "name": name, "sent": success})
 
     log.info(f"Broadcast complete — {sum(r['sent'] for r in results)}/{len(guests)} sent successfully")
     return {"results": results}, 200
@@ -162,7 +178,6 @@ def test():
 
 @app.route("/test-sheets", methods=["GET"])
 def test_sheets():
-    from sheets import get_guests
     guests = get_guests()
     return {"guests_loaded": len(guests)}
 
@@ -181,9 +196,16 @@ def send_all_invites():
         whos_guest = guest.get("Who's Guest", "")
 
         success = send_invite_template(phone, name, WEDDING_NAME, WEDDING_DATE, INVITE_IMAGE_URL)
-        sessions[phone] = {'step': "awaiting_rsvp", "name": name, "phone": phone, "max_guests": max_guests, "whos_guest": whos_guest}
 
         if success:
+            session_data = {
+                "step": "awaiting_rsvp",
+                "name": name,
+                "phone": phone,
+                "max_guests": max_guests,
+                "whos_guest": whos_guest
+            }
+            save_session(phone, session_data)
             update_guests_sheet(name, phone, "Invited")
             log.info(f"Invite sent | name={name} | phone={phone} | max_guests={max_guests} | whos_guest={whos_guest}")
         else:
@@ -191,6 +213,9 @@ def send_all_invites():
             log.error(f"Failed to send invite | name={name} | phone={phone}")
 
         results.append({"phone": phone, "name": name, "sent": success})
+
+        # Small delay to avoid hitting AiSensy rate limits on large broadcasts
+        time.sleep(0.1)
 
     log.info(f"Broadcast complete - {sum(r['sent'] for r in results)}/{len(guests)} sent successfully")
     return {"results": results}, 200
