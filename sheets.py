@@ -194,7 +194,7 @@ def delete_session(phone):
 
 
 def lookup_guest_by_phone(phone):
-    """Look up a guest name from the Guests sheet by phone number."""
+    """Look up a guest name and max_guests from the Guests sheet by phone number."""
     try:
         creds = get_credentials()
         client = gspread.authorize(creds)
@@ -204,10 +204,12 @@ def lookup_guest_by_phone(phone):
         if str(phone) in phones:
             row_index = phones.index(str(phone)) + 1
             row = sheet.row_values(row_index)
-            name = row[0] if row else None  # Column A = Name
-            log.info(f"Guest auto-matched by phone | phone={phone} | name={name}")
-            return name
-        return None
+            name = row[0] if len(row) > 0 else None        # Column A = Name
+            max_guests = int(row[2]) if len(row) > 2 and row[2] else 1  # Column C = Max Guests
+            whos_guest = row[4] if len(row) > 4 else ""    # Column E = Who's Guest
+            log.info(f"Guest auto-matched by phone | phone={phone} | name={name} | max_guests={max_guests}")
+            return name, max_guests, whos_guest
+        return None, 1, ""
     except Exception as e:
         log.error(f"Failed to lookup guest by phone | phone={phone} | error={e}", exc_info=True)
-        return None
+        return None, 1, ""

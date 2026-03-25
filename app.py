@@ -5,7 +5,7 @@ from flask import Flask, request
 from dotenv import load_dotenv
 from logger import get_logger
 from whatsapp import send_message, send_button_message, send_invite_template
-from sheets import save_rsvp, get_guests, update_guests_sheet, get_session, save_session, delete_session
+from sheets import save_rsvp, get_guests, update_guests_sheet, get_session, save_session, delete_session, lookup_guest_by_phone
 from conversation import handle_message, RSVP_BUTTONS
 
 load_dotenv()
