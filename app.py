@@ -17,8 +17,8 @@ app = Flask(__name__)
 # ── Wedding Configuration ────────────────────────────────────────────────────
 WEDDING_NAME = "Sarah & John's Wedding"
 WEDDING_DATE = "June 14th, 2025"
-INVITE_IMAGE_URL = "https://raw.githubusercontent.com/AbbasSavvy/Whatsapp_RSVP/main/assets/RSVP_Generated.png"
-# INVITE_IMAGE_URL = None
+# INVITE_IMAGE_URL = "https://raw.githubusercontent.com/AbbasSavvy/Whatsapp_RSVP/main/assets/RSVP_Generated.png"
+INVITE_IMAGE_URL = None
 
 
 @app.route('/webhook', methods=['GET'])
@@ -45,12 +45,14 @@ def webhook():
             "message": {
                 "type": "message",
                 "phone_number": "919004942031",
-                "sender": "user",
-                "message_type": "TEXT",
+                "sender": "USER",
+                "message_type": "TEXT" | "QUICK_REPLY",
                 "message_content": {
+                    // For TEXT:
                     "text": "Yes"
-                    // OR for button replies:
-                    // "button_reply": {"id": "yes", "title": "Yes, I'll be there!"}
+                    // For QUICK_REPLY (button tap):
+                    "text": "Yes, I'll be there!",
+                    "callbackPayload": "{\"id\":\"...\"}"
                 }
             }
         }
@@ -86,7 +88,32 @@ def webhook():
                 "type": "text",
                 "text": {"body": message_content.get("text", "")}
             }
+
+        elif msg_type == "QUICK_REPLY":
+            # Button taps arrive as QUICK_REPLY with the button label in text
+            # Map button label to yes/no id for conversation.py
+            text = message_content.get("text", "")
+            text_lower = text.lower()
+            if "yes" in text_lower:
+                button_id = "yes"
+            elif "no" in text_lower:
+                button_id = "no"
+            else:
+                button_id = text_lower  # pass through for unknown buttons
+            log.debug(f"QUICK_REPLY mapped | text='{text}' | button_id='{button_id}'")
+            message = {
+                "type": "interactive",
+                "interactive": {
+                    "type": "button_reply",
+                    "button_reply": {
+                        "id": button_id,
+                        "title": text
+                    }
+                }
+            }
+
         elif msg_type == "BUTTON" or "button_reply" in message_content:
+            # Fallback handler for any other button format
             button_reply = message_content.get("button_reply", {})
             message = {
                 "type": "interactive",
@@ -98,6 +125,7 @@ def webhook():
                     }
                 }
             }
+
         else:
             log.warning(f"Unhandled message type | phone={phone} | type={msg_type}")
             send_message(phone, "Sorry, I can only process text replies. Please type Yes or No.")
