@@ -18,11 +18,10 @@ processed_webhooks = set()
 
 
 # ── Wedding Configuration ────────────────────────────────────────────────────
-WEDDING_NAME = "Sarah & John's Wedding"
-WEDDING_DATE = "June 14th, 2025"
-INVITE_IMAGE_URL = "https://res.cloudinary.com/dhmc9wgnv/image/upload/q_auto,f_jpg/v1774419355/RSVP_Generated_hdgbzv.png"
-# INVITE_IMAGE_URL = "https://raw.githubusercontent.com/AbbasSavvy/Whatsapp_RSVP/main/assets/RSVP_Generated.png"
-# INVITE_IMAGE_URL = None
+
+EVENT_NAME = os.getenv("EVENT_NAME", "Sarah & John's Wedding")
+EVENT_DATE = os.getenv("EVENT_DATE", "June 14th, 2025")
+INVITE_IMAGE_URL = os.getenv("INVITE_IMAGE_URL")
 
 
 @app.route('/webhook', methods=['GET'])
@@ -192,7 +191,7 @@ def send_invites():
         max_guests = int(guest.get("max_guests", 1))
         whos_guest = guest.get("whos_guest", "")  # fixed: now read from request body
 
-        success = send_invite_template(phone, name, WEDDING_NAME, WEDDING_DATE, INVITE_IMAGE_URL)
+        success = send_invite_template(phone, name, EVENT_NAME, EVENT_DATE, INVITE_IMAGE_URL)
 
         if success:
             session_data = {
@@ -238,7 +237,7 @@ def send_all_invites():
         max_guests = int(guest.get("Max Guests", 1))
         whos_guest = guest.get("Who's Guest", "")
 
-        success = send_invite_template(phone, name, WEDDING_NAME, WEDDING_DATE, INVITE_IMAGE_URL)
+        success = send_invite_template(phone, name, EVENT_NAME, EVENT_DATE, INVITE_IMAGE_URL)
 
         if success:
             session_data = {
