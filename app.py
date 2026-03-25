@@ -20,7 +20,7 @@ processed_webhooks = set()
 # ── Wedding Configuration ────────────────────────────────────────────────────
 WEDDING_NAME = "Sarah & John's Wedding"
 WEDDING_DATE = "June 14th, 2025"
-INVITE_IMAGE_URL = "https://res.cloudinary.com/dhmc9wgnv/image/upload/v1774419355/RSVP_Generated_hdgbzv.png"
+INVITE_IMAGE_URL = "https://res.cloudinary.com/dhmc9wgnv/image/upload/q_auto,f_jpg/v1774419355/RSVP_Generated_hdgbzv.png"
 # INVITE_IMAGE_URL = "https://raw.githubusercontent.com/AbbasSavvy/Whatsapp_RSVP/main/assets/RSVP_Generated.png"
 # INVITE_IMAGE_URL = None
 
