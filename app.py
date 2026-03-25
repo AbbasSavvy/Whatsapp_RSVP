@@ -147,6 +147,29 @@ def webhook():
 
         # Load session from Sheets (survives redeploys)
         session = get_session(phone)
+
+        # If no session, try to auto-match guest from Guests sheet by phone
+        if session is None:
+            matched_name, max_guests, whos_guest = lookup_guest_by_phone(phone)
+            if matched_name:
+                log.warning(f"No session found but guest matched by phone | phone={phone} | name={matched_name}")
+                session = {
+                    "step": "awaiting_rsvp",
+                    "phone": phone,
+                    "name": f"[AUTO] {matched_name}",
+                    "max_guests": max_guests,
+                    "whos_guest": whos_guest
+                }
+            else:
+                log.warning(f"No session and phone not in Guests sheet | phone={phone}")
+                session = {
+                    "step": "awaiting_rsvp",
+                    "phone": phone,
+                    "name": f"[UNKNOWN] {phone}",
+                    "max_guests": 1,
+                    "whos_guest": ""
+                }
+                
         response_text, session_data, response_type = handle_message(phone, message, session)
 
         step = session_data.get("step")
