@@ -5,7 +5,7 @@ from flask import Flask, request
 from dotenv import load_dotenv
 from logger import get_logger
 from whatsapp import send_message, send_button_message, send_invite_template
-from sheets import save_rsvp, get_guests, update_guests_sheet, get_session, save_session, delete_session, lookup_guest_by_phone
+from sheets import save_rsvp, get_guests, update_guests_sheet, get_session, save_session, delete_session, lookup_guest_by_phone, has_existing_rsvp
 from conversation import handle_message, RSVP_BUTTONS
 
 load_dotenv()
@@ -148,8 +148,15 @@ def webhook():
         # Load session from Sheets (survives redeploys)
         session = get_session(phone)
 
-        # If no session, try to auto-match guest from Guests sheet by phone
+        # If no session, check if they already RSVPed first
         if session is None:
+            if has_existing_rsvp(phone):
+                log.info(f"Message received from already-RSVPed guest | phone={phone}")
+                send_message(phone,
+                             "Your RSVP is already recorded. 😊 If you need to make a change, please contact us directly.")
+                return "ok", 200
+
+            # Not RSVPed yet — try to auto-match from Guests sheet
             matched_name, max_guests, whos_guest = lookup_guest_by_phone(phone)
             if matched_name:
                 log.warning(f"No session found but guest matched by phone | phone={phone} | name={matched_name}")
@@ -169,7 +176,7 @@ def webhook():
                     "max_guests": 1,
                     "whos_guest": ""
                 }
-                
+
         response_text, session_data, response_type = handle_message(phone, message, session)
 
         step = session_data.get("step")
