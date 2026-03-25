@@ -20,8 +20,8 @@ processed_webhooks = set()
 # ── Wedding Configuration ────────────────────────────────────────────────────
 WEDDING_NAME = "Sarah & John's Wedding"
 WEDDING_DATE = "June 14th, 2025"
-# INVITE_IMAGE_URL = "https://raw.githubusercontent.com/AbbasSavvy/Whatsapp_RSVP/main/assets/RSVP_Generated.png"
-INVITE_IMAGE_URL = None
+INVITE_IMAGE_URL = "https://raw.githubusercontent.com/AbbasSavvy/Whatsapp_RSVP/main/assets/RSVP_Generated.png"
+# INVITE_IMAGE_URL = None
 
 
 @app.route('/webhook', methods=['GET'])
