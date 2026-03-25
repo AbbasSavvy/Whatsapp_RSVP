@@ -13,6 +13,9 @@ log = get_logger("app")
 
 app = Flask(__name__)
 
+# Deduplication cache to prevent AiSensy webhook retries from being processed twice
+processed_webhooks = set()
+
 
 # ── Wedding Configuration ────────────────────────────────────────────────────
 WEDDING_NAME = "Sarah & John's Wedding"
@@ -62,6 +65,17 @@ def webhook():
 
     try:
         log.debug(f"Webhook payload received: {data}")
+
+        # Deduplicate — AiSensy retries webhooks if no timely response
+        webhook_id = data.get("id", "")
+        if webhook_id and webhook_id in processed_webhooks:
+            log.debug(f"Duplicate webhook ignored | id={webhook_id}")
+            return "ok", 200
+        if webhook_id:
+            processed_webhooks.add(webhook_id)
+        # Prevent unbounded memory growth on long-running instances
+        if len(processed_webhooks) > 10000:
+            processed_webhooks.clear()
 
         # Only process inbound user messages — filter by topic
         topic = data.get("topic", "")
