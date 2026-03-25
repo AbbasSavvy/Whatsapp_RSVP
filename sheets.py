@@ -191,3 +191,23 @@ def delete_session(phone):
 
     except Exception as e:
         log.error(f"Failed to delete session | phone={phone} | error={e}", exc_info=True)
+
+
+def lookup_guest_by_phone(phone):
+    """Look up a guest name from the Guests sheet by phone number."""
+    try:
+        creds = get_credentials()
+        client = gspread.authorize(creds)
+        spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+        sheet = spreadsheet.worksheet("Guests")
+        phones = sheet.col_values(2)  # Column B = Phone
+        if str(phone) in phones:
+            row_index = phones.index(str(phone)) + 1
+            row = sheet.row_values(row_index)
+            name = row[0] if row else None  # Column A = Name
+            log.info(f"Guest auto-matched by phone | phone={phone} | name={name}")
+            return name
+        return None
+    except Exception as e:
+        log.error(f"Failed to lookup guest by phone | phone={phone} | error={e}", exc_info=True)
+        return None
