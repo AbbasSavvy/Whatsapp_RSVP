@@ -213,3 +213,17 @@ def lookup_guest_by_phone(phone):
     except Exception as e:
         log.error(f"Failed to lookup guest by phone | phone={phone} | error={e}", exc_info=True)
         return None, 1, ""
+
+
+def has_existing_rsvp(phone):
+    """Check if a phone number already has an RSVP in the Responses sheet."""
+    try:
+        creds = get_credentials()
+        client = gspread.authorize(creds)
+        spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+        sheet = spreadsheet.worksheet("Responses")
+        phones = sheet.col_values(3)  # Column C = Phone
+        return str(phone) in phones
+    except Exception as e:
+        log.error(f"Failed to check existing RSVP | phone={phone} | error={e}", exc_info=True)
+        return False
