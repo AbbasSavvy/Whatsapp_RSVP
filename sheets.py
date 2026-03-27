@@ -26,20 +26,23 @@ def get_credentials():
         return Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 
 
-def get_sheet():
-    log.debug("Authenticating with Google Sheets API")
+def _open_spreadsheet():
+    """Authenticate and open the spreadsheet. Returns the spreadsheet object."""
     creds = get_credentials()
     client = gspread.authorize(creds)
-    spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+    return client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+
+
+def get_sheet():
+    log.debug("Authenticating with Google Sheets API")
+    spreadsheet = _open_spreadsheet()
     log.debug("Google Sheets connection established")
     return spreadsheet.worksheet("Responses")
 
 
 def get_guests():
     try:
-        creds = get_credentials()
-        client = gspread.authorize(creds)
-        spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+        spreadsheet = _open_spreadsheet()
         sheet = spreadsheet.worksheet("Guests")
         records = sheet.get_all_records()
         log.info(f"Loaded {len(records)} guests from sheet")
@@ -52,15 +55,12 @@ def get_guests():
 def update_guests_sheet(name, phone, status):
     """Update the Status column for a guest in the Guests sheet."""
     try:
-        creds = get_credentials()
-        client = gspread.authorize(creds)
-        spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+        spreadsheet = _open_spreadsheet()
         sheet = spreadsheet.worksheet("Guests")
-
         phones = sheet.col_values(2)  # Column B = Phone
         if str(phone) in phones:
-            row = phones.index(str(phone)) + 1  # +1 since sheets are 1-indexed
-            sheet.update_cell(row, 4, status)   # Col D = Status
+            row = phones.index(str(phone)) + 1
+            sheet.update_cell(row, 4, status)  # Col D = Status
             log.info(f"Guest status updated | name={name} | phone={phone} | status={status}")
         else:
             log.warning(f"Phone not found in Guests sheet | name={name} | phone={phone}")
@@ -134,12 +134,10 @@ def save_rsvp(session):
         # Check if a partial entry already exists for this phone (from save_partial_rsvp)
         phones = sheet.col_values(3)  # Column C = Phone
         if str(phone) in phones:
-            # Update the existing partial row in place
             row_index = phones.index(str(phone)) + 1
             sheet.update(f"A{row_index}:F{row_index}", [row_data])
             log.info(f"RSVP updated (was partial) | name={name} | phone={phone} | attending={session.get('attending')} | guests={session.get('guests', 0)}")
         else:
-            # No partial entry — append fresh
             sheet.append_row(row_data)
             log.info(f"RSVP saved | name={name} | phone={phone} | attending={session.get('attending')} | guests={session.get('guests', 0)} | whos_guest={whos_guest}")
 
@@ -150,7 +148,7 @@ def save_rsvp(session):
         return False
 
 
-# ── Session Store (replaces in-memory sessions dict) ─────────────────────────
+# ── Session Store ─────────────────────────────────────────────────────────────
 
 def _get_sessions_sheet(spreadsheet):
     """Get or create the Sessions worksheet."""
@@ -166,9 +164,7 @@ def _get_sessions_sheet(spreadsheet):
 def get_session(phone):
     """Load a session from the Sessions sheet by phone number. Returns dict or None."""
     try:
-        creds = get_credentials()
-        client = gspread.authorize(creds)
-        spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+        spreadsheet = _open_spreadsheet()
         sheet = _get_sessions_sheet(spreadsheet)
 
         phones = sheet.col_values(1)  # Column A = Phone
@@ -200,17 +196,14 @@ def get_session(phone):
 def save_session(phone, session_data, retries=3):
     """
     Save or update a session row in the Sessions sheet.
-    Retries up to 3 times with backoff to handle transient Sheets API errors
-    under concurrent load (e.g. multiple guests replying simultaneously).
+    Retries up to 3 times with backoff to handle transient Sheets API errors.
     """
     for attempt in range(retries):
         try:
-            creds = get_credentials()
-            client = gspread.authorize(creds)
-            spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+            spreadsheet = _open_spreadsheet()
             sheet = _get_sessions_sheet(spreadsheet)
 
-            phones = sheet.col_values(1)  # Column A = Phone
+            phones = sheet.col_values(1)
             phone_str = str(phone)
 
             row = [
@@ -230,11 +223,11 @@ def save_session(phone, session_data, retries=3):
                 sheet.append_row(row)
                 log.debug(f"Session created | phone={phone} | step={session_data.get('step')}")
 
-            return  # Success — exit retry loop
+            return
 
         except Exception as e:
             if attempt < retries - 1:
-                wait = 0.5 * (attempt + 1)  # 0.5s, 1.0s, 1.5s backoff
+                wait = 0.5 * (attempt + 1)
                 log.warning(f"Session save failed, retrying in {wait}s | attempt={attempt + 1} | phone={phone} | error={e}")
                 time.sleep(wait)
             else:
@@ -244,12 +237,10 @@ def save_session(phone, session_data, retries=3):
 def delete_session(phone):
     """Remove a session row from the Sessions sheet when RSVP is complete."""
     try:
-        creds = get_credentials()
-        client = gspread.authorize(creds)
-        spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+        spreadsheet = _open_spreadsheet()
         sheet = _get_sessions_sheet(spreadsheet)
 
-        phones = sheet.col_values(1)  # Column A = Phone
+        phones = sheet.col_values(1)
         phone_str = str(phone)
 
         if phone_str in phones:
@@ -266,17 +257,15 @@ def delete_session(phone):
 def lookup_guest_by_phone(phone):
     """Look up a guest name and max_guests from the Guests sheet by phone number."""
     try:
-        creds = get_credentials()
-        client = gspread.authorize(creds)
-        spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+        spreadsheet = _open_spreadsheet()
         sheet = spreadsheet.worksheet("Guests")
         phones = sheet.col_values(2)  # Column B = Phone
         if str(phone) in phones:
             row_index = phones.index(str(phone)) + 1
             row = sheet.row_values(row_index)
-            name = row[0] if len(row) > 0 else None         # Column A = Name
-            max_guests = int(row[2]) if len(row) > 2 and row[2] else 1  # Column C = Max Guests
-            whos_guest = row[4] if len(row) > 4 else ""     # Column E = Who's Guest
+            name = row[0] if len(row) > 0 else None
+            max_guests = int(row[2]) if len(row) > 2 and row[2] else 1
+            whos_guest = row[4] if len(row) > 4 else ""
             log.info(f"Guest auto-matched by phone | phone={phone} | name={name} | max_guests={max_guests}")
             return name, max_guests, whos_guest
         return None, 1, ""
@@ -288,12 +277,76 @@ def lookup_guest_by_phone(phone):
 def has_existing_rsvp(phone):
     """Check if a phone number already has an RSVP in the Responses sheet."""
     try:
-        creds = get_credentials()
-        client = gspread.authorize(creds)
-        spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+        spreadsheet = _open_spreadsheet()
         sheet = spreadsheet.worksheet("Responses")
         phones = sheet.col_values(3)  # Column C = Phone
         return str(phone) in phones
     except Exception as e:
         log.error(f"Failed to check existing RSVP | phone={phone} | error={e}", exc_info=True)
         return False
+
+
+# ── Broadcast Batch Write ─────────────────────────────────────────────────────
+
+def broadcast_batch_write(guest_updates):
+    """
+    Write all session and status updates for a broadcast in a single Sheets
+    connection. Called once after all AiSensy invites have been sent.
+
+    This replaces calling save_session() + update_guests_sheet() individually
+    per guest, which would generate ~800 API calls for 400 guests and blow
+    Google's 60 reads/minute quota.
+
+    guest_updates: list of dicts, each with:
+        phone, name, status ("Invited" | "Could Not Connect"),
+        and for Invited: step, max_guests, whos_guest
+    """
+    if not guest_updates:
+        return
+
+    try:
+        spreadsheet = _open_spreadsheet()
+        sessions_sheet = _get_sessions_sheet(spreadsheet)
+        guests_sheet = spreadsheet.worksheet("Guests")
+
+        # Read both phone columns once upfront
+        existing_session_phones = sessions_sheet.col_values(1)  # Sessions col A
+        guest_sheet_phones = guests_sheet.col_values(2)          # Guests col B
+
+        log.info(f"Batch write started | updates={len(guest_updates)}")
+
+        for update in guest_updates:
+            phone_str = str(update["phone"])
+            status = update["status"]
+
+            # ── Sessions sheet (only for successfully sent invites) ───────────
+            if status == "Invited":
+                row = [
+                    phone_str,
+                    update.get("step", "awaiting_rsvp"),
+                    update.get("name", ""),
+                    str(update.get("max_guests", 1)),
+                    update.get("whos_guest", ""),
+                    "",  # attending — not yet known at invite time
+                ]
+                if phone_str in existing_session_phones:
+                    row_index = existing_session_phones.index(phone_str) + 1
+                    sessions_sheet.update(f"A{row_index}:F{row_index}", [row])
+                    log.debug(f"Session updated (batch) | phone={phone_str}")
+                else:
+                    sessions_sheet.append_row(row)
+                    existing_session_phones.append(phone_str)  # keep local list in sync
+                    log.debug(f"Session created (batch) | phone={phone_str}")
+
+            # ── Guests sheet status ──────────────────────────────────────────
+            if phone_str in guest_sheet_phones:
+                row_index = guest_sheet_phones.index(phone_str) + 1
+                guests_sheet.update_cell(row_index, 4, status)  # Col D = Status
+                log.info(f"Guest status updated (batch) | phone={phone_str} | status={status}")
+            else:
+                log.warning(f"Phone not found in Guests sheet (batch) | phone={phone_str}")
+
+        log.info(f"Batch write complete | updates={len(guest_updates)}")
+
+    except Exception as e:
+        log.error(f"Batch write failed | error={e}", exc_info=True)
