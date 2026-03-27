@@ -5,7 +5,7 @@ from flask import Flask, request
 from dotenv import load_dotenv
 from logger import get_logger
 from whatsapp import send_message, send_button_message, send_invite_template
-from sheets import save_rsvp, get_guests, update_guests_sheet, get_session, save_session, delete_session, lookup_guest_by_phone, has_existing_rsvp
+from sheets import save_rsvp, save_partial_rsvp, get_guests, update_guests_sheet, get_session, save_session, delete_session, lookup_guest_by_phone, has_existing_rsvp
 from conversation import handle_message, RSVP_BUTTONS
 
 load_dotenv()
@@ -192,6 +192,12 @@ def webhook():
             # Persist session state to Sheets
             save_session(phone, session_data)
 
+            # Save partial RSVP if guest just confirmed attendance but count is still pending
+            # This ensures we have a record even if the guest never follows up with a count
+            if step == "awaiting_count":
+                log.info(f"Guest confirmed attendance, saving partial RSVP | phone={phone}")
+                save_partial_rsvp(session_data)
+
         # Send response
         if response_type == "button":
             log.debug(f"Sending button message to {phone}")
@@ -252,6 +258,16 @@ def test():
 def test_sheets():
     guests = get_guests()
     return {"guests_loaded": len(guests)}
+
+
+@app.route("/pending-rsvps", methods=["GET"])
+def pending_rsvps():
+    """Return all guests who confirmed attendance but never provided a guest count."""
+    sheet = get_sheet()
+    records = sheet.get_all_records()
+    pending = [r for r in records if str(r.get("Number of Guests", "")).strip() == "Pending"]
+    log.info(f"Pending RSVPs queried — {len(pending)} found")
+    return {"pending_count": len(pending), "pending": pending}, 200
 
 
 @app.route("/send-all-invites", methods=["POST"])
