@@ -162,6 +162,14 @@ def webhook():
         # Load session from Sheets (survives redeploys)
         session = get_session(phone)
 
+        # Check for existing RSVP even if session exists — handles race condition
+        # where guest taps a button before previous RSVP write completes
+        if has_existing_rsvp(phone):
+            log.info(f"Message received from already-RSVPed guest | phone={phone}")
+            send_message(phone,
+                         "Your RSVP is already recorded. 😊 If you need to make a change, please contact us directly.")
+            return "ok", 200
+
         # If no session, check if they already RSVPed first
         if session is None:
             if has_existing_rsvp(phone):
