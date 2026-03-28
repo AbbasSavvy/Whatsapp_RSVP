@@ -91,7 +91,7 @@ def handle_message(phone, message, session):
 
             return (
                 f"Wonderful! We're so excited to celebrate with you! 🎉\n\n"
-                f"How many guests will be joining you? Please reply with a number between *1* and *{max_guests}*.",
+                f"How many guests will be joining you? Please reply with a number.",
                 session,
                 "text",
             )
