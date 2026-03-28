@@ -215,7 +215,7 @@ def webhook():
             log.debug(f"Sending text message to {phone}")
             send_message(phone, response_text)
 
-    except (KeyError, IndexError) as e:
+    except Exception as e:
         log.error(f"Failed to process webhook payload: {e}", exc_info=True)
 
     return "ok", 200

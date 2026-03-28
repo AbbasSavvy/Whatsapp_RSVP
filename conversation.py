@@ -11,9 +11,13 @@ Button reply IDs:
   "no"  → not attending
 """
 
+import os  # add this at the top
 from logger import get_logger
 
 log = get_logger("conversation")
+
+EVENT_NAME = os.getenv("EVENT_NAME", "Sarah & John's Wedding")
+EVENT_DATE = os.getenv("EVENT_DATE", "June 14th, 2025")
 
 # Buttons:
 RSVP_BUTTONS = [
@@ -52,7 +56,7 @@ def handle_message(phone, message, session):
         log.info(f"New conversation started | phone: {phone}")
         session = {"step": "awaiting_rsvp", "phone": phone, "name": "Unknown_Guest"}
         body = (
-            "Hi! 👋 You've reached the RSVP bot for *Sarah & John's Wedding* on *June 14th, 2025*.\n\n"
+            f"Hi! 👋 You've reached the RSVP bot for *{EVENT_NAME}* on *{EVENT_DATE}*.\n\n"
             "Will you be able to join us?"
         )
         return body, session, "button"
