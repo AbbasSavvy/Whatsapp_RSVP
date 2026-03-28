@@ -299,8 +299,13 @@ def broadcast_batch_write(guest_updates):
     Update Sessions sheet and Guests sheet status for all broadcast recipients
     in a single Sheets connection. Called once after all invites are sent.
 
-    Uses a cached phone list read once upfront — avoids per-guest API calls
+    Uses cached phone lists read once upfront — avoids per-guest API calls
     that would blow Google's 60 reads/minute quota for 400 guests.
+
+    Skips session writes for guests who already responded during the broadcast
+    window (i.e. their phone is already in the Responses sheet). This prevents
+    the batch write from overwriting or resurrecting sessions for guests who
+    completed their RSVP before the batch ran.
 
     guest_updates: list of dicts with keys:
         phone, name, status ("Invited" | "Could Not Connect")
@@ -313,10 +318,12 @@ def broadcast_batch_write(guest_updates):
         spreadsheet = _open_spreadsheet()
         sessions_sheet = _get_sessions_sheet(spreadsheet)
         guests_sheet = spreadsheet.worksheet("Guests")
+        responses_sheet = spreadsheet.worksheet("Responses")
 
-        # Read both phone columns once upfront — no per-guest reads
+        # Read all phone columns once upfront — no per-guest reads
         existing_session_phones = sessions_sheet.col_values(1)  # Sessions col A
         guest_sheet_phones = guests_sheet.col_values(2)          # Guests col B
+        responded_phones = responses_sheet.col_values(3)         # Responses col C
 
         log.info(f"Batch write started | updates={len(guest_updates)}")
 
@@ -326,22 +333,27 @@ def broadcast_batch_write(guest_updates):
 
             # ── Sessions sheet (only for successfully sent invites) ───────────
             if status == "Invited":
-                row = [
-                    phone_str,
-                    update.get("step", "awaiting_rsvp"),
-                    update.get("name", ""),
-                    str(update.get("max_guests", 1)),
-                    update.get("whos_guest", ""),
-                    "",  # attending — not yet known at invite time
-                ]
-                if phone_str in existing_session_phones:
-                    row_index = existing_session_phones.index(phone_str) + 1
-                    sessions_sheet.update(f"A{row_index}:F{row_index}", [row])
-                    log.debug(f"Session updated (batch) | phone={phone_str}")
+                if phone_str in responded_phones:
+                    # Guest already responded during the broadcast window —
+                    # their session was already handled by the webhook, skip
+                    log.info(f"Guest already responded during broadcast — skipping session write | phone={phone_str}")
                 else:
-                    sessions_sheet.append_row(row)
-                    existing_session_phones.append(phone_str)  # keep local list in sync
-                    log.debug(f"Session created (batch) | phone={phone_str}")
+                    row = [
+                        phone_str,
+                        update.get("step", "awaiting_rsvp"),
+                        update.get("name", ""),
+                        str(update.get("max_guests", 1)),
+                        update.get("whos_guest", ""),
+                        "",  # attending — not yet known at invite time
+                    ]
+                    if phone_str in existing_session_phones:
+                        row_index = existing_session_phones.index(phone_str) + 1
+                        sessions_sheet.update(f"A{row_index}:F{row_index}", [row])
+                        log.debug(f"Session updated (batch) | phone={phone_str}")
+                    else:
+                        sessions_sheet.append_row(row)
+                        existing_session_phones.append(phone_str)  # keep local list in sync
+                        log.debug(f"Session created (batch) | phone={phone_str}")
 
             # ── Guests sheet status ──────────────────────────────────────────
             if phone_str in guest_sheet_phones:

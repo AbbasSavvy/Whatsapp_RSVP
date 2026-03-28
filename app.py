@@ -260,10 +260,14 @@ def send_all_invites():
     immediately — avoiding the Gunicorn 30s worker timeout that kills the
     request mid-broadcast.
 
-    Sessions are written individually per guest immediately after each invite
-    is sent, so guests who respond before the broadcast completes are handled
-    correctly. The Guests sheet status column is updated in a single batch
-    write at the end to avoid quota issues.
+    Sessions are written in a single batch after all invites are sent,
+    using a cached phone list to avoid per-guest API calls that would blow
+    Google's 60 reads/minute quota.
+
+    Guests who respond before the batch write completes are handled by the
+    [AUTO] fallback in the webhook — lookup_guest_by_phone matches them by
+    phone, creates a session in memory, and processes their RSVP correctly.
+    The batch write then skips session writes for guests who already responded.
     """
     global broadcast_running
 
@@ -283,7 +287,7 @@ def send_all_invites():
         global broadcast_running
         try:
             log.info(f"Broadcast thread started | total={len(guests)}")
-            guest_updates = []  # collected for batch Guests sheet status update at the end
+            guest_updates = []  # collected for batch Sheets write at the end
 
             for i, guest in enumerate(guests, start=1):
                 name = guest["Name"]
@@ -295,17 +299,12 @@ def send_all_invites():
                 success = send_invite_template(phone, name, EVENT_NAME, EVENT_DATE, INVITE_IMAGE_URL)
 
                 if success:
-                    # Write session immediately so guest can respond before broadcast completes
-                    save_session(phone, {
-                        "step": "awaiting_rsvp",
-                        "name": name,
-                        "phone": phone,
-                        "max_guests": max_guests,
-                        "whos_guest": whos_guest,
-                    })
                     guest_updates.append({
                         "phone": phone,
                         "name": name,
+                        "step": "awaiting_rsvp",
+                        "max_guests": max_guests,
+                        "whos_guest": whos_guest,
                         "status": "Invited",
                     })
                 else:
@@ -319,12 +318,12 @@ def send_all_invites():
                 # Breathing room between AiSensy API calls to avoid rate limiting
                 time.sleep(0.5)
 
-            # All invites sent — batch update Guests sheet status column only
+            # All invites sent — batch write sessions + Guests sheet status
             sent = sum(1 for u in guest_updates if u["status"] == "Invited")
             failed = len(guest_updates) - sent
-            log.info(f"Invites complete — sent={sent} failed={failed} — writing batch status to Guests sheet")
+            log.info(f"Invites complete — sent={sent} failed={failed} — writing batch to Sheets")
             broadcast_batch_write(guest_updates)
-            log.info("Broadcast fully complete including Guests sheet update")
+            log.info("Broadcast fully complete including Sheets update")
 
         finally:
             # Always reset the flag, even if something crashes mid-broadcast
@@ -337,7 +336,7 @@ def send_all_invites():
     return {
         "status": "broadcast started",
         "total_guests": len(guests),
-        "message": "Check Railway logs for progress. Guests sheet will update when all invites are sent."
+        "message": "Check Railway logs for progress. Sheets will update when all invites are sent."
     }, 200
 
 
