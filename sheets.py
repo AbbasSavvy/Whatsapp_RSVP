@@ -307,6 +307,10 @@ def broadcast_batch_write(guest_updates):
     the batch write from overwriting or resurrecting sessions for guests who
     completed their RSVP before the batch ran.
 
+    Also preserves "Invited and Responded" status in the Guests sheet —
+    does not overwrite it back to "Invited" for guests who completed their
+    RSVP during the broadcast window.
+
     guest_updates: list of dicts with keys:
         phone, name, status ("Invited" | "Could Not Connect")
         and for Invited: step, max_guests, whos_guest
@@ -320,9 +324,10 @@ def broadcast_batch_write(guest_updates):
         guests_sheet = spreadsheet.worksheet("Guests")
         responses_sheet = spreadsheet.worksheet("Responses")
 
-        # Read all phone columns once upfront — no per-guest reads
+        # Read all phone/status columns once upfront — no per-guest reads
         existing_session_phones = sessions_sheet.col_values(1)  # Sessions col A
         guest_sheet_phones = guests_sheet.col_values(2)          # Guests col B
+        guest_sheet_statuses = guests_sheet.col_values(4)        # Guests col D
         responded_phones = responses_sheet.col_values(3)         # Responses col C
 
         log.info(f"Batch write started | updates={len(guest_updates)}")
@@ -358,8 +363,13 @@ def broadcast_batch_write(guest_updates):
             # ── Guests sheet status ──────────────────────────────────────────
             if phone_str in guest_sheet_phones:
                 row_index = guest_sheet_phones.index(phone_str) + 1
-                guests_sheet.update_cell(row_index, 4, status)  # Col D = Status
-                log.info(f"Guest status updated (batch) | phone={phone_str} | status={status}")
+                # Don't overwrite if guest already responded during broadcast window
+                current_status = guest_sheet_statuses[row_index - 1] if row_index - 1 < len(guest_sheet_statuses) else ""
+                if current_status == "Invited and Responded":
+                    log.info(f"Guest already responded — preserving status | phone={phone_str}")
+                else:
+                    guests_sheet.update_cell(row_index, 4, status)  # Col D = Status
+                    log.info(f"Guest status updated (batch) | phone={phone_str} | status={status}")
             else:
                 log.warning(f"Phone not found in Guests sheet (batch) | phone={phone_str}")
 
