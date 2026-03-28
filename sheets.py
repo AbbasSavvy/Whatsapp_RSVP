@@ -1,12 +1,16 @@
 import os
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import gspread
 from google.oauth2.service_account import Credentials
 from logger import get_logger
 
 log = get_logger("sheets")
+
+# Indian Standard Time (UTC+5:30)
+IST = timezone(timedelta(hours=5, minutes=30))
+
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -90,7 +94,7 @@ def save_partial_rsvp(session):
             return
 
         row = [
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
             name,
             phone,
             "Yes",
@@ -123,7 +127,7 @@ def save_rsvp(session):
             sheet.append_row(["Timestamp", "Name", "Phone", "Attending", "Number of Guests", "Who's Guest"])
 
         row_data = [
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
             name,
             phone,
             "Yes" if session.get("attending") else "No",
