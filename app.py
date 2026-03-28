@@ -221,42 +221,6 @@ def webhook():
     return "ok", 200
 
 
-@app.route("/send-invites", methods=["POST"])
-def send_invites():
-    """Send invites to a manually provided list of guests."""
-    data = request.get_json()
-    guests = data.get("guests", [])
-    log.info(f"Starting invite broadcast for {len(guests)} guest(s)")
-
-    results = []
-
-    for guest in guests:
-        name = guest["name"]
-        phone = str(guest["phone"])
-        max_guests = int(guest.get("max_guests", 1))
-        whos_guest = guest.get("whos_guest", "")  # fixed: now read from request body
-
-        success = send_invite_template(phone, name, EVENT_NAME, EVENT_DATE, INVITE_IMAGE_URL)
-
-        if success:
-            session_data = {
-                "step": "awaiting_rsvp",
-                "name": name,
-                "phone": phone,
-                "max_guests": max_guests,
-                "whos_guest": whos_guest
-            }
-            save_session(phone, session_data)
-            log.info(f"Invite sent | name={name} | phone={phone} | max_guests={max_guests}")
-        else:
-            log.error(f"Failed to send invite | name={name} | phone={phone}")
-
-        results.append({"phone": phone, "name": name, "sent": success})
-
-    log.info(f"Broadcast complete — {sum(r['sent'] for r in results)}/{len(guests)} sent successfully")
-    return {"results": results}, 200
-
-
 @app.route("/test", methods=["GET"])
 def test():
     success = send_message("917021839581", "Hello from the wedding bot!")  # test number
