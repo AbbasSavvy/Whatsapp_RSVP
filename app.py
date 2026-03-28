@@ -22,6 +22,9 @@ app = Flask(__name__)
 # Deduplication cache to prevent AiSensy webhook retries from being processed twice
 processed_webhooks = set()
 
+# Guard to prevent duplicate broadcast triggers
+broadcast_running = False
+
 
 # ── Wedding Configuration ────────────────────────────────────────────────────
 
@@ -289,52 +292,66 @@ def send_all_invites():
     connection at the end of the broadcast, instead of per-guest calls that
     blow the Google Sheets quota.
     """
+    global broadcast_running
+
+    if broadcast_running:
+        log.warning("Broadcast already in progress — rejecting duplicate request")
+        return {"error": "Broadcast already in progress. Check Railway logs for progress."}, 429
+
     guests = get_guests()
     if not guests:
         log.error("No guests loaded from sheet — aborting broadcast")
         return {"error": "No guests found in sheet"}, 400
 
+    broadcast_running = True
     log.info(f"Broadcast triggered for {len(guests)} guest(s) — starting background thread")
 
     def run_broadcast(guests):
-        log.info(f"Broadcast thread started | total={len(guests)}")
-        guest_updates = []  # collected for a single batch Sheets write at the end
+        global broadcast_running
+        try:
+            log.info(f"Broadcast thread started | total={len(guests)}")
+            guest_updates = []  # collected for a single batch Sheets write at the end
 
-        for i, guest in enumerate(guests, start=1):
-            name = guest["Name"]
-            phone = str(guest["Phone"])
-            max_guests = int(guest.get("Max Guests", 1))
-            whos_guest = guest.get("Who's Guest", "")
+            for i, guest in enumerate(guests, start=1):
+                name = guest["Name"]
+                phone = str(guest["Phone"])
+                max_guests = int(guest.get("Max Guests", 1))
+                whos_guest = guest.get("Who's Guest", "")
 
-            log.info(f"Sending invite {i}/{len(guests)} | name={name} | phone={phone}")
-            success = send_invite_template(phone, name, EVENT_NAME, EVENT_DATE, INVITE_IMAGE_URL)
+                log.info(f"Sending invite {i}/{len(guests)} | name={name} | phone={phone}")
+                success = send_invite_template(phone, name, EVENT_NAME, EVENT_DATE, INVITE_IMAGE_URL)
 
-            if success:
-                guest_updates.append({
-                    "phone": phone,
-                    "name": name,
-                    "step": "awaiting_rsvp",
-                    "max_guests": max_guests,
-                    "whos_guest": whos_guest,
-                    "status": "Invited",
-                })
-            else:
-                guest_updates.append({
-                    "phone": phone,
-                    "name": name,
-                    "status": "Could Not Connect",
-                })
-                log.error(f"Failed to send invite | name={name} | phone={phone}")
+                if success:
+                    guest_updates.append({
+                        "phone": phone,
+                        "name": name,
+                        "step": "awaiting_rsvp",
+                        "max_guests": max_guests,
+                        "whos_guest": whos_guest,
+                        "status": "Invited",
+                    })
+                else:
+                    guest_updates.append({
+                        "phone": phone,
+                        "name": name,
+                        "status": "Could Not Connect",
+                    })
+                    log.error(f"Failed to send invite | name={name} | phone={phone}")
 
-            # Breathing room between AiSensy API calls to avoid rate limiting
-            time.sleep(0.5)
+                # Breathing room between AiSensy API calls to avoid rate limiting
+                time.sleep(0.5)
 
-        # All invites sent — now do a single batch write to Sheets
-        sent = sum(1 for u in guest_updates if u["status"] == "Invited")
-        failed = len(guest_updates) - sent
-        log.info(f"Invites complete — sent={sent} failed={failed} — writing batch to Sheets")
-        broadcast_batch_write(guest_updates)
-        log.info("Broadcast fully complete including Sheets update")
+            # All invites sent — now do a single batch write to Sheets
+            sent = sum(1 for u in guest_updates if u["status"] == "Invited")
+            failed = len(guest_updates) - sent
+            log.info(f"Invites complete — sent={sent} failed={failed} — writing batch to Sheets")
+            broadcast_batch_write(guest_updates)
+            log.info("Broadcast fully complete including Sheets update")
+
+        finally:
+            # Always reset the flag, even if something crashes mid-broadcast
+            broadcast_running = False
+            log.info("Broadcast lock released")
 
     thread = threading.Thread(target=run_broadcast, args=(guests,), daemon=True)
     thread.start()
