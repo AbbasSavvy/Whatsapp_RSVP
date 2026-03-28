@@ -162,15 +162,10 @@ def webhook():
         # Load session from Sheets (survives redeploys)
         session = get_session(phone)
 
-        # Check for existing RSVP even if session exists — handles race condition
-        # where guest taps a button before previous RSVP write completes
-        if has_existing_rsvp(phone):
-            log.info(f"Message received from already-RSVPed guest | phone={phone}")
-            send_message(phone,
-                         "Your RSVP is already recorded. 😊 If you need to make a change, please contact us directly.")
-            return "ok", 200
-
-        # If no session, check if they already RSVPed first
+        # If no session, check if they already RSVPed or auto-match from Guests sheet.
+        # Note: has_existing_rsvp is intentionally only checked when session is None.
+        # Checking it unconditionally would block guests in awaiting_count since their
+        # partial "Pending" RSVP row already exists in the Responses sheet.
         if session is None:
             if has_existing_rsvp(phone):
                 log.info(f"Message received from already-RSVPed guest | phone={phone}")
@@ -265,9 +260,10 @@ def send_all_invites():
     immediately — avoiding the Gunicorn 30s worker timeout that kills the
     request mid-broadcast.
 
-    All Sheets writes (sessions + status) are batched into a single API
-    connection at the end of the broadcast, instead of per-guest calls that
-    blow the Google Sheets quota.
+    Sessions are written individually per guest immediately after each invite
+    is sent, so guests who respond before the broadcast completes are handled
+    correctly. The Guests sheet status column is updated in a single batch
+    write at the end to avoid quota issues.
     """
     global broadcast_running
 
@@ -287,7 +283,7 @@ def send_all_invites():
         global broadcast_running
         try:
             log.info(f"Broadcast thread started | total={len(guests)}")
-            guest_updates = []  # collected for a single batch Sheets write at the end
+            guest_updates = []  # collected for batch Guests sheet status update at the end
 
             for i, guest in enumerate(guests, start=1):
                 name = guest["Name"]
@@ -299,12 +295,17 @@ def send_all_invites():
                 success = send_invite_template(phone, name, EVENT_NAME, EVENT_DATE, INVITE_IMAGE_URL)
 
                 if success:
+                    # Write session immediately so guest can respond before broadcast completes
+                    save_session(phone, {
+                        "step": "awaiting_rsvp",
+                        "name": name,
+                        "phone": phone,
+                        "max_guests": max_guests,
+                        "whos_guest": whos_guest,
+                    })
                     guest_updates.append({
                         "phone": phone,
                         "name": name,
-                        "step": "awaiting_rsvp",
-                        "max_guests": max_guests,
-                        "whos_guest": whos_guest,
                         "status": "Invited",
                     })
                 else:
@@ -318,12 +319,12 @@ def send_all_invites():
                 # Breathing room between AiSensy API calls to avoid rate limiting
                 time.sleep(0.5)
 
-            # All invites sent — now do a single batch write to Sheets
+            # All invites sent — batch update Guests sheet status column only
             sent = sum(1 for u in guest_updates if u["status"] == "Invited")
             failed = len(guest_updates) - sent
-            log.info(f"Invites complete — sent={sent} failed={failed} — writing batch to Sheets")
+            log.info(f"Invites complete — sent={sent} failed={failed} — writing batch status to Guests sheet")
             broadcast_batch_write(guest_updates)
-            log.info("Broadcast fully complete including Sheets update")
+            log.info("Broadcast fully complete including Guests sheet update")
 
         finally:
             # Always reset the flag, even if something crashes mid-broadcast
@@ -336,7 +337,7 @@ def send_all_invites():
     return {
         "status": "broadcast started",
         "total_guests": len(guests),
-        "message": "Check Railway logs for progress. Sheets will update when all invites are sent."
+        "message": "Check Railway logs for progress. Guests sheet will update when all invites are sent."
     }, 200
 
 

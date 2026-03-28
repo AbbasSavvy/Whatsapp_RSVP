@@ -275,7 +275,13 @@ def lookup_guest_by_phone(phone):
 
 
 def has_existing_rsvp(phone):
-    """Check if a phone number already has an RSVP in the Responses sheet."""
+    """
+    Check if a phone number already has a completed RSVP in the Responses sheet.
+    Note: this returns True for partial 'Pending' entries too, so it must only
+    be called when session is None (i.e. the guest has no active conversation).
+    Calling it unconditionally would block guests in awaiting_count from
+    submitting their guest count.
+    """
     try:
         spreadsheet = _open_spreadsheet()
         sheet = spreadsheet.worksheet("Responses")
@@ -290,15 +296,14 @@ def has_existing_rsvp(phone):
 
 def broadcast_batch_write(guest_updates):
     """
-    Write all session and status updates for a broadcast in a single Sheets
-    connection. Called once after all AiSensy invites have been sent.
+    Update Sessions sheet and Guests sheet status for all broadcast recipients
+    in a single Sheets connection. Called once after all invites are sent.
 
-    This replaces calling save_session() + update_guests_sheet() individually
-    per guest, which would generate ~800 API calls for 400 guests and blow
-    Google's 60 reads/minute quota.
+    Uses a cached phone list read once upfront — avoids per-guest API calls
+    that would blow Google's 60 reads/minute quota for 400 guests.
 
-    guest_updates: list of dicts, each with:
-        phone, name, status ("Invited" | "Could Not Connect"),
+    guest_updates: list of dicts with keys:
+        phone, name, status ("Invited" | "Could Not Connect")
         and for Invited: step, max_guests, whos_guest
     """
     if not guest_updates:
@@ -309,7 +314,7 @@ def broadcast_batch_write(guest_updates):
         sessions_sheet = _get_sessions_sheet(spreadsheet)
         guests_sheet = spreadsheet.worksheet("Guests")
 
-        # Read both phone columns once upfront
+        # Read both phone columns once upfront — no per-guest reads
         existing_session_phones = sessions_sheet.col_values(1)  # Sessions col A
         guest_sheet_phones = guests_sheet.col_values(2)          # Guests col B
 
