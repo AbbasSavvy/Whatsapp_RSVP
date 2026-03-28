@@ -151,7 +151,12 @@ def webhook():
 
         else:
             log.warning(f"Unhandled message type | phone={phone} | type={msg_type}")
-            send_message(phone, "Sorry, I can only process text replies. Please type Yes or No.")
+            session = get_session(phone)
+            if session and session.get("step") == "awaiting_count":
+                max_guests = session.get("max_guests", 1)
+                send_message(phone, f"Please reply with a *number* between 1 and {max_guests}.")
+            else:
+                send_message(phone, "Sorry, I can only process text replies. Please tap the Yes or No buttons.")
             return "ok", 200
 
         # Load session from Sheets (survives redeploys)
