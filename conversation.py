@@ -11,7 +11,7 @@ Button reply IDs:
   "no"  → not attending
 """
 
-import os  # add this at the top
+import os
 from logger import get_logger
 
 log = get_logger("conversation")
@@ -24,6 +24,18 @@ RSVP_BUTTONS = [
     {"id": "yes", "title": "Yes, I'll be there!"},
     {"id": "no", "title": "No, Can't make it."},
 ]
+
+
+def _display_name(name):
+    """
+    Strip internal prefixes from name before showing to guest.
+    [AUTO] and [UNKNOWN] are used internally for tracking but should
+    never be visible in messages sent to guests.
+    """
+    for prefix in ("[AUTO] ", "[UNKNOWN] "):
+        if name.startswith(prefix):
+            return name[len(prefix):]
+    return name
 
 
 def extract_input(message):
@@ -79,7 +91,7 @@ def handle_message(phone, message, session):
             if max_guests == 1:
                 session["guests"] = 1
                 session["step"] = "done"
-                name = session.get("name", "Guest")
+                name = _display_name(session.get("name", "Guest"))
                 log.info(f"Single guest auto-confirmed | phone={phone} | name={name}")
                 return (
                     f"Wonderful! We're so excited to celebrate with you, {name}! 🎉\n\n"
@@ -91,7 +103,7 @@ def handle_message(phone, message, session):
 
             return (
                 f"Wonderful! We're so excited to celebrate with you! 🎉\n\n"
-                f"How many guests will be joining you? Please reply with a number.",
+                "How many guests will be joining you? Please reply with a number.",
                 session,
                 "text",
             )
@@ -101,7 +113,7 @@ def handle_message(phone, message, session):
             session["attending"] = False
             session["guests"] = 0
             session["step"] = "done"
-            name = session.get("name", "Guest")
+            name = _display_name(session.get("name", "Guest"))
             return (
                 f"Thank you for letting us know, {name}. You'll be missed! 💐\n\n"
                 "We hope to celebrate with you another time.",
@@ -130,7 +142,7 @@ def handle_message(phone, message, session):
                 session["attending"] = False
                 session["guests"] = 0
                 session["step"] = "done"
-                name = session.get("name", "Guest")
+                name = _display_name(session.get("name", "Guest"))
                 return (
                     f"No problem, {name}. Thank you for letting us know! You'll be missed. 💐\n\n"
                     "We hope to celebrate with you another time.",
@@ -141,7 +153,7 @@ def handle_message(phone, message, session):
                 # They tapped Yes again — just re-ask for the count
                 log.debug(f"Guest tapped Yes again during awaiting_count | phone={phone}")
                 return (
-                    f"How many guests will be joining you? Please reply with a number between *1* and *{max_guests}*.",
+                    "How many guests will be joining you? Please reply with a number.",
                     session,
                     "text",
                 )
@@ -160,14 +172,14 @@ def handle_message(phone, message, session):
         except ValueError:
             log.warning(f"Invalid guest count input | phone={phone} | value='{value}'")
             return (
-                f"Please reply with a *number* between 1 and {max_guests} (e.g. *2*).",
+                f"Please reply with a *number* (e.g. *2*).",
                 session,
                 "text",
             )
 
         session["guests"] = guest_count
         session["step"] = "done"
-        name = session.get("name", "Guest")
+        name = _display_name(session.get("name", "Guest"))
         log.info(f"Guest count recorded | phone={phone} | name={name} | count={guest_count}")
 
         return (
@@ -189,4 +201,4 @@ def handle_message(phone, message, session):
         )
 
     log.error(f"Unknown conversation step | phone={phone} | step={step}")
-    return "Something went wrong. Please try again.", session, "text" #comment
+    return "Something went wrong. Please try again.", session, "text"
